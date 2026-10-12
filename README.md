@@ -30,6 +30,8 @@ Ek kurulum yok. `index.html` dosyasını tarayıcıda açıp **▶ Başlat**'a y
 "Animator vs Math" tarzında, siyah zeminde Nod'un büyüyen bir denklemin içinde dört işlemle boğuştuğu 78 saniyelik kısa film.
 Hazır video: [`video/nod-ile-matematik.mp4`](video/nod-ile-matematik.mp4) (1920×1080, 30 fps, sesli).
 
+Efektler: hareket bulanıklığı, hızlı uçan rakamların arkasında iz, darbelerde RGB ayrışması ve çizgi roman darbe çizgileri, dramatik anlarda sinema şeritleri, kılıç parlamasında yatay ışık çizgisi, yuvarlanan sıfırdan kıvılcımlar, arka planda süzülen ışık zerreleri, rakamlarda hafif parlama, film greni, kapanışta havai fişekler.
+
 Akış: `1` → `1+1=2` → +1'lerle `=10`'a kadar sayma → mıknatısla `2+2+2+2+2` → değnekle `5×2`, sonra `5×20=100` → çekiçle `100−1−1−98=0` → Nod sıfırın üstünde yuvarlanır → gökten `12` düşer, kılıçla `12÷3=4`, `4÷2=2`, `2÷2=1` → "Bir daha?" → `1 + 1 = ?` → kapanış.
 
 `video.html` tarayıcıda oynatılabilir. Videoyu yeniden üretmek için (Chromium + Playwright + ffmpeg gerekir):
