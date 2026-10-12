@@ -75,3 +75,20 @@ Her kare zamanın saf fonksiyonudur (`draw(t)`), bu yüzden render kare kare det
 NODE_PATH=$(npm root -g) node tools/render-shorts.js nod-shorts.html video/nod-shorts.mp4
 NODE_PATH=$(npm root -g) node tools/render-shorts.js nod-shorts.html kareler --stills 1,9.9,23.6   # tek tek PNG kareler
 ```
+
+## Video 4: Nod — SIUUU! (`nod-siuuu.html`)
+
+30-second vertical (9:16) cartoon, 1080×1920, 30 fps, with sound. Hand-drawn style on cream notebook paper (blue lines, red margin), thick black outlines, soft grey shading; speech appears only in white bubbles.
+Ready video: [`video/nod-siuuu.mp4`](video/nod-siuuu.mp4).
+
+Story: Nod sprawled in the armchair (chips on his right, cola on his left) → GOAL on TV → chips explode, he launches out and sprints across the rug →
+jump, 180° spin, "SIUUU!" landing (paper lines shake) → his arm swings back, the blue vase wobbles in slow motion and shatters → "Oh no!" + thought cloud of Mom's flying slipper →
+frantic repair montage (collecting shards, ripping tape with his teeth, wrap-wrap-wrap, crooked vase stands) → one finger, let go… it holds → tiny "siu…" →
+door bursts open, Mom spots the vase: red face, steam, bun pops → "NOOOD!", slipper flies at the camera, Nod dives behind the armchair, Dad covers his eyes → smash cut to black.
+
+Sound (all synthesized with Web Audio): TV crowd roar, whoosh, formant-synth "SIUUU" shout, glass shatter, tape rips and squeaks, whispered "siu", door bang, Mom's "NOOOD!", kettle steam, slipper whoosh.
+
+```bash
+NODE_PATH=$(npm root -g) node tools/render-shorts.js nod-siuuu.html video/nod-siuuu.mp4
+NODE_PATH=$(npm root -g) node tools/render-shorts.js nod-siuuu.html frames --stills 3.2,9.9,13.6   # single PNG frames
+```
