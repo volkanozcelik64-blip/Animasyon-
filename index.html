@@ -197,7 +197,7 @@ function musicTick() {
 setInterval(musicTick, 50);
 
 /* ================== Yerleşim & arka plan ================== */
-let bg = null, bgStars = [], floaters = [];
+let bg = null, vig = null, bgStars = [], floaters = [], petals = [];
 function layout() {
   W = vertical ? 720 : 1280; H = vertical ? 1280 : 720;
   cv.width = W * R; cv.height = H * R;
@@ -250,16 +250,23 @@ function buildBg() {
   for (let x = -W; x < W * 2; x += 90) { b.beginPath(); b.moveTo(W / 2 + (x - W / 2) * .35, G); b.lineTo(x, H); b.stroke(); }
   for (let i = 1; i < 4; i++) { const y = G + (H - G) * (i * i) / 16; b.beginPath(); b.moveTo(0, y); b.lineTo(W, y); b.stroke(); }
   bgStars = []; for (let i = 0; i < 90; i++) bgStars.push({ x: rand(0, W), y: rand(0, G * .75), r: rand(.6, 2.2), ph: rand(0, 7) });
+  petals = []; for (let i = 0; i < 22; i++) petals.push({ x: rand(0, W), y: rand(-H, H), v: rand(.02, .05), sw: rand(0, 7), r: rand(5, 9), rot: rand(0, 6) });
+  vig = document.createElement('canvas'); vig.width = W * R; vig.height = H * R;
+  const vg = vig.getContext('2d'); vg.scale(R, R);
+  const vgr = vg.createRadialGradient(W / 2, H / 2, Math.min(W, H) * .35, W / 2, H / 2, Math.max(W, H) * .75);
+  vgr.addColorStop(0, 'rgba(5,2,20,0)'); vgr.addColorStop(1, 'rgba(5,2,20,.6)');
+  vg.fillStyle = vgr; vg.fillRect(0, 0, W, H);
   floaters = []; const syms = ['+', '−', '×', '÷', '='];
   for (let i = 0; i < 14; i++) floaters.push({ x: rand(0, W), y: rand(0, H), s: syms[i % 5], size: rand(26, 60), v: rand(.006, .02), rot: rand(-.4, .4) });
 }
 
 /* ================== Sahne ================== */
 let S, hero;
-function makeHero() { return { x: -120, hop: 0, dir: 1, armA: .5, tool: null, walk: 0, phase: 0, s: 1, rot: 0, sqx: 1, sqy: 1, lastX: -120, bubble: null, ghosts: [], dash: false, glint: 0, brow: 0, happy: 0 }; }
+function makeHero() { return { dustT: 0, x: -120, hop: 0, dir: 1, armA: .5, tool: null, walk: 0, phase: 0, s: 1, rot: 0, sqx: 1, sqy: 1, lastX: -120, bubble: null, ghosts: [], dash: false, glint: 0, brow: 0, happy: 0 }; }
 function resetScene() {
   jobs.length = 0;
-  S = { blobs: [], pieces: [], texts: [], parts: [], slashes: [], bolts: [], rings: [], mstars: [], field: null, shake: 0, flash: 0, flashColor: '#fff', hud: null, count: null, title: null, cards: [], end: null, hint: false };
+  S = { blobs: [], pieces: [], texts: [], parts: [], slashes: [], bolts: [], rings: [], mstars: [], rays: [], field: null, shake: 0, flash: 0, flashColor: '#fff', hud: null, count: null, title: null, cards: [], end: null, hint: false,
+    cam: { x: W / 2, y: H / 2, z: 1 }, hitstop: 0, slow: 1, invert: 0, lines: null };
   hero = makeHero();
 }
 
@@ -345,7 +352,7 @@ class NumBlob {
 function addText(o) { const t = Object.assign({ x: 0, y: 0, size: 60, color: '#fff', stroke: '#1b1446', s: 1, alpha: 1, rot: 0, text: '' }, o); S.texts.push(t); return t; }
 function removeText(t) { S.texts = S.texts.filter(x => x !== t); }
 function popWord(text, x, y, o = {}) {
-  const t = addText({ text, x, y, size: (o.size || 64) * U, color: o.color || '#ffcf3f', stroke: o.stroke || '#2a1458', s: 0, rot: o.rot ?? rand(-.12, .12) });
+  const t = addText({ text, x, y, size: (o.size || 64) * U, color: o.color || '#ffcf3f', stroke: o.stroke || '#2a1458', s: 0, rot: o.rot ?? rand(-.12, .12), burst: o.burst || null });
   (async () => { await tween(t, { s: 1 }, 260, E.back); await wait(o.hold ?? 750); await tween(t, { alpha: 0, y: t.y - 40 * U, s: 1.15 }, 300); removeText(t); })();
   return t;
 }
@@ -370,6 +377,32 @@ function impact(x, y, o = {}) {
   ring(x, y, o.ring || 240, o.ringColor || '#fff');
   burst(x, y, 36, { speed: .7, shape: 'star', colors: o.colors });
 }
+function camTo(x, y, z, dur = 400, ease = E.io) { return tween(S.cam, { x, y, z }, dur, ease); }
+function camReset(dur = 500) { return camTo(W / 2, H / 2, 1, dur); }
+function camPunch(x, y, z = 1.2) { camTo(x, y, z, 90, E.out).then(() => camReset(650)); }
+function applyCam(par = 1) {
+  const c = S.cam, z = 1 + (c.z - 1) * par;
+  const cx = clamp(W / 2 + (c.x - W / 2) * par, W / (2 * z), W - W / (2 * z)), cy = clamp(H / 2 + (c.y - H / 2) * par, H / (2 * z), H - H / (2 * z));
+  ctx.translate(W / 2, H / 2); ctx.scale(z, z); ctx.translate(-cx, -cy);
+}
+function puff(x, y, n = 6, dir = 0) {
+  for (let i = 0; i < n; i++) S.parts.push({ x: x + rand(-10, 10) * U, y: y - rand(0, 8) * U, vx: (dir || (Math.random() - .5) * 2) * rand(.05, .2), vy: -rand(.01, .06), g: -.00003, life: rand(450, 700), age: 0,
+    size: rand(6, 12) * U, color: 'rgba(210,200,255,.55)', shape: 'puff', rot: 0, vr: 0, bounce: false });
+}
+function raysAt(x, y, color = '#fff6a8', hold = 1400, size = 260) {
+  const r = { x, y, a: 0, color, size: size * U };
+  S.rays.push(r);
+  tween(r, { a: 1 }, 300).then(() => wait(hold)).then(() => tween(r, { a: 0 }, 500)).then(() => { S.rays = S.rays.filter(q => q !== r); });
+  return r;
+}
+function speedLines(dur = 600) { S.lines = { a: 1 }; const l = S.lines; wait(dur).then(() => tween(l, { a: 0 }, 300)).then(() => { if (S.lines === l) S.lines = null; }); }
+function hitStop(ms = 100, inv = 0) { S.hitstop = ms; S.invert = inv; }
+function firework(x, y) {
+  const c = PAL[Math.floor(Math.random() * PAL.length)];
+  burst(x, y, 46, { colors: [c, '#fff', lighten(c, .4)], speed: .42, g: .00025, life: 1500, size: 4 });
+  burst(x, y, 12, { colors: ['#fff'], speed: .2, shape: 'star', life: 900, g: 0 });
+  ring(x, y, 150, c); noise(.3, { vol: .25, f: 2500, to: 600 }); tone(200, .25, { vol: .2, to: 60 });
+}
 function addBlob(v, x) { const b = new NumBlob(v, x); S.blobs.push(b); return b; }
 function removeBlob(b) { S.blobs = S.blobs.filter(x => x !== b); }
 async function spawnBlob(v, x) {
@@ -384,7 +417,7 @@ async function spawnOp(sym, x) {
 function blobHop(b, x, h, dur, ease = E.io) {
   const x0 = b.x;
   return anim(dur, t => { b.x = x0 + (x - x0) * t; b.hop = Math.sin(Math.PI * clamp(t, 0, 1)) * h; }, ease)
-    .then(() => { b.hop = 0; b.sy = .8; b.sx = 1.15; tween(b, { sx: 1, sy: 1 }, 400, E.elastic); });
+    .then(() => { b.hop = 0; b.sy = .8; b.sx = 1.15; if (h > 40 * U) puff(b.x, G, 5); tween(b, { sx: 1, sy: 1 }, 400, E.elastic); });
 }
 
 /* ---------- kahraman hareketleri ---------- */
@@ -399,7 +432,7 @@ function heroJumpTo(x, endHop, dur, height = 100) {
   const h = hero, x0 = h.x, h0 = h.hop;
   if (Math.abs(x - x0) > 2) h.dir = x > x0 ? 1 : -1;
   return anim(dur, t => { h.x = x0 + (x - x0) * t; h.hop = h0 + (endHop - h0) * t + Math.sin(Math.PI * t) * height * U; }, E.io)
-    .then(() => { if (endHop === 0) { h.hop = 0; h.sqy = .82; h.sqx = 1.12; sfx.land(); tween(h, { sqy: 1, sqx: 1 }, 320, E.back); } });
+    .then(() => { if (endHop === 0) { h.hop = 0; h.sqy = .82; h.sqx = 1.12; sfx.land(); puff(h.x - 20 * U, G, 4, -1); puff(h.x + 20 * U, G, 4, 1); tween(h, { sqy: 1, sqx: 1 }, 320, E.back); } });
 }
 function heroHand(ext = 0) {
   const h = hero, k = U * h.s, sx = h.x + h.dir * 6 * k, sy = G - h.hop - 100 * k, L = (42 + ext) * k;
@@ -536,6 +569,12 @@ function drawText(t) {
   const w = ctx.measureText(t.text).width * t.s;
   const x = clamp(t.x, w / 2 + 12, W - w / 2 - 12);
   ctx.translate(x, t.y); ctx.rotate(t.rot); ctx.scale(t.s, t.s);
+  if (t.burst) {
+    const bw = w / t.s * .62 + t.size * .5, bh = t.size * 1.05, n = 18;
+    ctx.beginPath();
+    for (let i = 0; i < n * 2; i++) { const a = i / (n * 2) * Math.PI * 2, k = i % 2 ? .78 : 1.08 + .1 * Math.sin(i * 7.3); ctx.lineTo(Math.cos(a) * bw * k, Math.sin(a) * bh * k); }
+    ctx.closePath(); ctx.fillStyle = t.burst; ctx.fill(); ctx.lineWidth = t.size * .09; ctx.strokeStyle = t.stroke; ctx.stroke();
+  }
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
   ctx.lineWidth = t.size * .18; ctx.strokeStyle = t.stroke; ctx.strokeText(t.text, 0, 0);
   ctx.fillStyle = t.color; ctx.fillText(t.text, 0, 0);
@@ -583,9 +622,30 @@ function drawFX() {
     if (p.shape === 'star') { starPath(p.x, p.y, p.size * 1.5, p.size * .6, p.rot); ctx.fill(); }
     else if (p.shape === 'rect') { ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.fillRect(-p.size, -p.size * .5, p.size * 2, p.size); ctx.restore(); }
     else if (p.shape === 'rock') { ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.beginPath(); ctx.moveTo(-p.size, 0); ctx.lineTo(-p.size * .3, -p.size); ctx.lineTo(p.size, -p.size * .4); ctx.lineTo(p.size * .6, p.size * .8); ctx.closePath(); ctx.fill(); ctx.restore(); }
+    else if (p.shape === 'puff') { circle(p.x, p.y, p.size * (1 + p.age / p.life * 1.6)); ctx.fill(); }
+    else if (p.shape === 'spark') { ctx.strokeStyle = p.color; ctx.lineWidth = 2.5 * U; ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - p.vx * 40, p.y - p.vy * 40); ctx.stroke(); }
     else { circle(p.x, p.y, p.size); ctx.fill(); }
   }
   ctx.globalAlpha = 1;
+}
+function drawRays() {
+  for (const r of S.rays) {
+    ctx.save(); ctx.translate(r.x, r.y); ctx.rotate(time * .0008); ctx.globalAlpha = r.a * .55;
+    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, r.size); g.addColorStop(0, r.color); g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    for (let i = 0; i < 14; i++) { ctx.rotate(Math.PI * 2 / 14); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(r.size, -r.size * .12); ctx.lineTo(r.size, r.size * .12); ctx.closePath(); ctx.fill(); }
+    ctx.restore();
+  }
+}
+function drawLines() {
+  const l = S.lines; if (!l || l.a <= .01) return;
+  ctx.save(); ctx.globalAlpha = l.a * .7; ctx.strokeStyle = '#fff';
+  const R0 = Math.min(W, H) * .42, R1 = Math.hypot(W, H) * .6;
+  for (let i = 0; i < 46; i++) {
+    const a = Math.random() * Math.PI * 2, r0 = R0 + Math.random() * R0 * .5;
+    ctx.lineWidth = rand(1, 5); ctx.beginPath(); ctx.moveTo(W / 2 + Math.cos(a) * r0, H / 2 + Math.sin(a) * r0); ctx.lineTo(W / 2 + Math.cos(a) * R1, H / 2 + Math.sin(a) * R1); ctx.stroke();
+  }
+  ctx.restore();
 }
 function drawTitle() {
   const t = S.title;
@@ -679,7 +739,17 @@ function update(dt) {
   if (h.dash) h.ghosts.push({ x: h.x, hop: h.hop, armA: h.armA, a: .6 });
   h.ghosts.forEach(g => g.a -= dt * .003); h.ghosts = h.ghosts.filter(g => g.a > 0);
   h.glint = Math.max(0, h.glint - dt * .0015);
-  S.blobs.forEach(b => b.update(dt));
+  S.blobs.forEach(b => {
+    b.update(dt);
+    if (b.trail && Math.random() < .7) S.parts.push({ x: b.x + rand(-8, 8), y: b.y + rand(-8, 8), vx: rand(-.05, .05), vy: rand(-.05, 0), g: 0, life: 500, age: 0, size: rand(5, 11) * U, color: ['#ffcf3f', '#ff8c42', '#ff5d73'][Math.floor(rand(0, 3))], shape: 'puff', rot: 0, vr: 0 });
+  });
+  h.dustT -= dt;
+  if (h.walk > .5 && h.hop < 2 && h.dustT < 0) { h.dustT = 110; puff(h.x - h.dir * 12 * U, G, 2, -h.dir); }
+  for (const s of S.mstars) if (Math.random() < .6) S.parts.push({ x: s.x, y: s.y, vx: rand(-.05, .05), vy: rand(0, .06), g: 0, life: 500, age: 0, size: 4 * U, color: ['#ffe066', '#fff', '#c77dff'][Math.floor(rand(0, 3))], shape: 'star', rot: rand(0, 6), vr: .01 });
+  if (S.field && Math.random() < .5) for (const b of S.field.targets) {
+    const a = rand(0, Math.PI * 2); S.parts.push({ x: b.x + Math.cos(a) * b.r, y: b.y + Math.sin(a) * b.r, vx: Math.cos(a) * .25, vy: Math.sin(a) * .25, g: 0, life: 220, age: 0, size: 3, color: Math.random() < .5 ? '#4cc9f0' : '#fff', shape: 'spark', rot: 0, vr: 0 });
+  }
+  petals.forEach(p => { p.y += p.v * dt; p.x += Math.sin(time * .001 + p.sw) * .03 * dt; p.rot += .002 * dt; if (p.y > H + 20) { p.y = -20; p.x = rand(0, W); } });
   for (const p of S.parts) {
     p.age += dt; p.vy += p.g * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt;
     if (p.bounce && p.y > G && p.vy > 0) { p.y = G; p.vy *= -.35; p.vx *= .6; }
@@ -692,14 +762,19 @@ function update(dt) {
 }
 function draw() {
   ctx.setTransform(R, 0, 0, R, 0, 0);
+  ctx.save(); applyCam(.3);
   ctx.drawImage(bg, 0, 0, W, H);
   for (const s of bgStars) { ctx.globalAlpha = .4 + .6 * Math.abs(Math.sin(time * .0015 + s.ph)); ctx.fillStyle = '#fff'; circle(s.x, s.y, s.r); ctx.fill(); }
   ctx.globalAlpha = 1;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   for (const f of floaters) { ctx.save(); ctx.globalAlpha = .07; ctx.font = F(f.size); ctx.fillStyle = '#fff'; ctx.translate(f.x, f.y); ctx.rotate(f.rot); ctx.fillText(f.s, 0, 0); ctx.restore(); }
+  ctx.restore();
   ctx.save();
   if (S.shake > .3) ctx.translate((Math.random() - .5) * S.shake, (Math.random() - .5) * S.shake);
+  applyCam(1);
+  for (const p of petals) { ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.fillStyle = 'rgba(255,170,200,.75)'; ctx.beginPath(); ctx.ellipse(0, 0, p.r * U, p.r * .55 * U, 0, 0, 7); ctx.fill(); ctx.restore(); }
   drawTitle();
+  drawRays();
   S.pieces.forEach(drawPiece);
   S.blobs.forEach(b => b.draw());
   drawField();
@@ -709,7 +784,10 @@ function draw() {
   drawFX();
   S.texts.forEach(drawText);
   ctx.restore();
+  drawLines();
+  ctx.drawImage(vig, 0, 0, W, H);
   drawHud(); drawCount(); drawEnd();
+  if (S.invert > 0) { ctx.globalCompositeOperation = 'difference'; ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H); ctx.globalCompositeOperation = 'source-over'; }
   if (S.flash > 0) { ctx.globalAlpha = Math.min(1, S.flash); ctx.fillStyle = S.flashColor; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; }
   if (paused && started) {
     ctx.fillStyle = 'rgba(10,6,30,.55)'; ctx.fillRect(0, 0, W, H);
@@ -719,7 +797,7 @@ function draw() {
 let last = performance.now();
 function frame(t) {
   const real = Math.min(50, t - last); last = t;
-  if (!paused) { const dt = real * speed; time += dt; update(dt); }
+  if (!paused) { let dt = real * speed; if (S.hitstop > 0) { S.hitstop -= real; dt = 0; } if (S.invert > 0) S.invert -= real; dt *= S.slow; time += dt; update(dt); }
   draw();
   requestAnimationFrame(frame);
 }
@@ -738,20 +816,23 @@ async function solveAdd(A, op, B) {
   await equip('magnet'); say('Mıknatıs gücü!', 900);
   await heroRunTo(CX, undefined, true);
   await tween(op, { s: 0, alpha: 0, y: heroHand(40).y }, 260, E.in); removeText(op);
-  popWord('MIKNATIS!', CX, G - 330 * U, { color: '#ff5d73' });
+  popWord('MIKNATIS!', CX, G - 330 * U, { color: '#fff', burst: '#ff3b5c' });
   tween(hero, { armA: .02 }, 300);
   await tween(hero, { hop: Math.max(A.r, B.r) * 2 + 75 * U }, 400, E.out);
   S.field = { targets: [A, B] }; sfx.hum();
+  camTo(CX, G - 150 * U, 1.15, 1100);
   A.mood = B.mood = 'scared'; A.lookFixed = B.lookFixed = true; A.look = 1; B.look = -1;
   await wait(450);
   const ra = A.r, rb = B.r;
   await Promise.all([tween(A, { x: CX - ra * .55 }, 750, E.in), tween(B, { x: CX + rb * .55 }, 750, E.in)]);
   S.field = null;
   impact(CX, G - Math.max(ra, rb), { colors: [A.color, B.color, '#fff', '#ffcf3f'] });
+  hitStop(90); camPunch(CX, G - 120 * U, 1.3);
   removeBlob(A); removeBlob(B);
   const C = addBlob(A.v + B.v, CX); C.s = .55; C.mood = 'joy'; C.glow = 1;
   tween(C, { s: 1 }, 800, E.elastic);
-  popWord('BİRLEŞTİ!', CX, G - baseR(C.v) * 2 - 60 * U, { color: '#3ddc97' });
+  popWord('BİRLEŞTİ!', CX, G - baseR(C.v) * 2 - 60 * U, { color: '#fff', burst: '#00bb7f' });
+  raysAt(CX, G - baseR(C.v), '#b6ffda', 900);
   tween(hero, { armA: .5 }, 400);
   await heroJumpTo(CX - baseR(C.v) - 85 * U, 0, 480, 40); hero.dir = 1;
   await wait(250); C.mood = 'happy';
@@ -777,15 +858,17 @@ async function solveSub(A, op, B) {
   await heroRunTo(hx - 50 * U, undefined, true);
   await Promise.all([heroJumpTo(hx, hopT + 120 * U, 380, 50), tween(hero, { armA: 3.6 }, 380, E.out)]);
   hero.dir = 1;
-  await wait(140);
+  camTo(T.x, T.y, 1.35, 260);
+  await wait(200);
   sfx.swoosh();
   await Promise.all([tween(hero, { armA: fa }, 110, E.in), tween(hero, { hop: hopT }, 110, E.in)]);
   impact(T.x, T.y, { colors: ['#aab3c5', '#7d8597', A.color, '#ffcf3f'], ringColor: '#ffcf3f', ring: 180 });
   burst(T.x, T.y, 18, { shape: 'rock', colors: ['#c9c2e8', '#8c83b8', A.color], speed: .5, up: .4, bounce: true, life: 1300, size: 8 });
-  popWord('BAM!', T.x, T.y - 90 * U, { size: 96, color: '#ff3b5c', rot: -.15 });
+  popWord('BAM!', T.x, T.y - 90 * U, { size: 96, color: '#fff', burst: '#ff3b5c', rot: -.15 });
+  hitStop(130, 70); speedLines(250); camReset(700);
   A.sy = .78; A.sx = 1.18; tween(A, { sx: 1, sy: 1 }, 600, E.elastic);
   // kopan parça uçuyor
-  B.ground = false; const bx0 = B.x, by0 = B.y;
+  B.ground = false; B.trail = true; const bx0 = B.x, by0 = B.y;
   sfx.whistle();
   popWord('GÜLE GÜLE!', bx0 + 170 * U, by0 - 210 * U, { size: 44, color: '#4cc9f0' });
   anim(1200, t => { B.x = bx0 + t * W * .75; B.y = by0 - Math.sin(t * Math.PI * .9) * 260 * U + t * t * 140 * U; B.rot = t * 12; B.s = .85 * (1 - t * .5); }).then(() => removeBlob(B));
@@ -806,13 +889,13 @@ async function solveMul(A, op, B) {
   await heroRunTo(CX - 10 * U, undefined, true);
   tween(hero, { armA: 2.1 }, 250, E.out); await wait(200);
   const tip = heroHand(75);
-  bolt(tip.x, tip.y, B.x, B.y); sfx.zap();
+  bolt(tip.x, tip.y, B.x, B.y); sfx.zap(); S.flash = .35; S.flashColor = '#c77dff'; camPunch(B.x, B.y, 1.15);
   tween(op, { s: 0, alpha: 0 }, 250).then(() => removeText(op));
   await wait(200);
   removeBlob(B); burst(B.x, B.y, 26, { colors: ['#ffe066', '#fff', '#c77dff'], shape: 'star', speed: .5 }); ring(B.x, B.y, 160, '#c77dff');
   const stars = [];
   for (let i = 0; i < n; i++) { const s = { x: B.x, y: B.y, s: 0, ph: i }; S.mstars.push(s); stars.push(s); }
-  popWord('KOPYALA!', B.x, G - 330 * U, { color: '#c77dff' });
+  popWord('KOPYALA!', B.x, G - 330 * U, { color: '#fff', burst: '#9b5de5' });
   sfx.magic();
   await Promise.all(stars.map((s, i) => tween(s, { s: 1, x: B.x + (i - (n - 1) / 2) * 34 * U, y: B.y - 110 * U - (i % 2) * 24 * U }, 450, E.out)));
   const mid = W / 2, want = A.r * 2.25, spacing = Math.min(want, (W * .92) / n), sc = Math.min(1, spacing / want);
@@ -829,18 +912,20 @@ async function solveMul(A, op, B) {
     burst(tx, ty, 16, { colors: ['#ffe066', '#fff', A.color], shape: 'star', speed: .35 });
     sfx.pop(1 + i * .15);
     if (i === 0) { A.glow = 1; continue; }
+    ring(tx, ty, 90, '#ffe066');
     const c = addBlob(a, tx); c.color = A.color; c.mood = 'joy'; c.tag = String(i + 1);
     tween(c, { s: sc }, 320, E.back); clones.push(c);
   }
   const f = addText({ text: Array(n).fill(a).join(' + '), x: mid, y: G + (H - G) * .45, size: (vertical ? 46 : 42) * U, color: '#fff', s: 0 });
   tween(f, { s: 1 }, 320, E.back);
   await wait(1100);
-  popWord('HEPSİ BİR OLSUN!', mid, G - 330 * U, { color: '#ffe066', size: 58 });
+  popWord('HEPSİ BİR OLSUN!', mid, G - 330 * U, { color: '#fff', burst: '#ffa62b', size: 54 });
   anim(700, t => hero.armA = 2.6 + Math.sin(t * Math.PI * 4) * .5);
   clones.forEach(c => c.tag = null);
   heroJumpTo(mid - baseR(a * n) - 90 * U, 0, 900, 60).then(() => { hero.dir = 1; tween(hero, { armA: .5 }, 300); });
   await Promise.all(clones.map(c => blobHop(c, mid, 150 * U, 650, E.in)));
   impact(mid, G - A.r * sc, { colors: [A.color, '#ffe066', '#fff', '#c77dff'], ringColor: '#c77dff' });
+  hitStop(90); camPunch(mid, G - 120 * U, 1.25); raysAt(mid, G - baseR(a * n), '#e0b3ff', 900);
   clones.forEach(removeBlob);
   tween(f, { alpha: 0 }, 300).then(() => removeText(f));
   const C = addBlob(a * n, mid); C.s = .5; C.mood = 'joy'; C.glow = 1;
@@ -866,8 +951,10 @@ async function solveDiv(A, op, B) {
   hero.brow = 1;
   await tween(hero, { armA: 3.1 }, 300, E.out);
   hero.glint = 1; sfx.clang();
-  popWord('HİYAAA!', hero.x + 30 * U, G - 260 * U, { color: '#fff', size: 58 });
+  camTo((hero.x + A.x) / 2, G - 140 * U, 1.3, 500);
+  popWord('HİYAAA!', hero.x + 30 * U, G - 260 * U, { color: '#fff', burst: '#ffa62b', size: 58 });
   await wait(550);
+  speedLines(500);
   // hızlı atılış + kesikler
   hero.dash = true;
   const ang = .22, cuts = [...Array(n - 1)].map((_, i) => -r + 2 * r * (i + 1) / n);
@@ -883,6 +970,8 @@ async function solveDiv(A, op, B) {
     }
   }, E.io);
   hero.dash = false; hero.dir = 1;
+  hitStop(160, 90); S.flash = .4;
+  camReset(700);
   await tween(hero, { armA: .35 }, 500);
   say('Zaten kesildin.', 900);
   await wait(700);
@@ -892,6 +981,8 @@ async function solveDiv(A, op, B) {
   const pieces = [...Array(n)].map((_, i) => ({ b: A, x0: i === 0 ? -r * 3 : cuts[i - 1], x1: i === n - 1 ? r * 3 : cuts[i], dx: 0, dy: 0, rot: 0, ang, alpha: 1 }));
   S.pieces.push(...pieces);
   burst(A.x, A.y, 24, { colors: ['#fff', '#bff6ff', A.color], speed: .6, shape: 'star' });
+  ring(A.x, A.y, 260, '#bff6ff');
+  S.slow = .3; tween(S, { slow: 1 }, 260, E.in);
   heroRunTo(HOME, 700, true);
   const mid = vertical ? W / 2 : CX, want = baseR(q) * 2.4, spacing = Math.min(want, (W * .9) / n), sc = Math.min(1, spacing / want);
   const slots = [...Array(n)].map((_, i) => mid + (i - (n - 1) / 2) * spacing);
@@ -908,7 +999,7 @@ async function solveDiv(A, op, B) {
     await wait(130);
   }
   hero.brow = 0;
-  popWord(`Her parça ${q}!`, mid, G - baseR(q) * 2 * sc - 70 * U, { size: 54, color: '#3ddc97' });
+  popWord(`Her parça ${q}!`, mid, G - baseR(q) * 2 * sc - 70 * U, { size: 54, color: '#fff', burst: '#00bb7f' });
   await wait(900);
   res.forEach(c => { c.tag = null; c.mood = 'happy'; });
   return res;
@@ -919,11 +1010,13 @@ const SOLVE = { '+': solveAdd, '−': solveSub, '×': solveMul, '÷': solveDiv }
 async function countdown(n = 3) {
   S.count = { n, p: 0, x: CX, y: vertical ? H * .3 : G - 330 * U, s: 0 };
   await tween(S.count, { s: 1 }, 250, E.back);
-  for (let i = n; i >= 1; i--) { S.count.n = i; sfx.tick(); await anim(1000, t => S.count.p = t); }
+  for (let i = n; i >= 1; i--) { S.count.n = i; sfx.tick(); ring(S.count.x, S.count.y, 110, '#ffcf3f'); await anim(1000, t => S.count.p = t); }
+  popWord('BAŞLA!', S.count.x, S.count.y, { color: '#fff', burst: '#ff3b5c', size: 60, hold: 350 });
   sfx.go(); await tween(S.count, { s: 0 }, 200, E.in); S.count = null;
 }
 const PRAISE = ['SÜPER!', 'HARİKA!', 'MÜKEMMEL!', 'EFSANE!', 'BRAVO!'];
-async function reveal(ans) {
+async function reveal(ans, res = []) {
+  res.forEach(b => { raysAt(b.x, b.y, '#fff6a8', 1500, 200); b.glow = 1; b.mood = 'joy'; });
   const h = S.hud; h.ans = ans; h.ansS = 0; sfx.win();
   tween(h, { ansS: 1 }, 450, E.back);
   burst(W / 2, (vertical ? H * .12 : 84), 30, { colors: ['#3ddc97', '#ffcf3f', '#fff'], shape: 'star', speed: .5 });
@@ -933,6 +1026,7 @@ async function reveal(ans) {
   await wait(1100);
 }
 async function clearStage() {
+  camReset(400);
   heroRunTo(HOME, undefined, true);
   const bs = [...S.blobs];
   await Promise.all(bs.map((b, i) => wait(i * 70).then(() => { sfx.pop(.7); return tween(b, { s: 0 }, 260, E.in); })));
@@ -954,8 +1048,8 @@ async function playQuestion(q, idx, total, custom = false) {
   const B = await spawnBlob(b, CX + D);
   say(['Hmm...', 'Bu kolay!', 'Hazır mısın?'][idx % 3], 1100);
   await countdown(3);
-  await SOLVE[q.op](A, op, B);
-  await reveal(compute(q.a, q.op, q.b));
+  const res = await SOLVE[q.op](A, op, B);
+  await reveal(compute(q.a, q.op, q.b), res);
   await clearStage();
 }
 async function addOperand(A, sym, b) {
@@ -968,8 +1062,8 @@ async function addOperand(A, sym, b) {
   return { op, B };
 }
 async function playBoss(idx, total) {
-  S.flashColor = '#ff3b5c'; S.flash = .6; S.shake = 14 * U; sfx.boss();
-  popWord('BOSS SORUSU!', W / 2, H * .42, { size: 110, color: '#ff3b5c', hold: 1100, rot: -.06 });
+  S.flashColor = '#ff3b5c'; S.flash = .6; S.shake = 18 * U; sfx.boss(); speedLines(1300); camPunch(W / 2, H / 2, 1.15);
+  popWord('BOSS SORUSU!', W / 2, H * .42, { size: vertical ? 80 : 110, color: '#fff', burst: '#ff3b5c', hold: 1100, rot: -.06 });
   await wait(1700);
   const expr = '(6 + 2) × 3 ÷ 4';
   await makeHud(expr, '+', { boss: true, label: 'KARIŞIK', sub: 'Önce parantez, sonra soldan sağa', color: '#ff3b5c', idx, total });
@@ -983,9 +1077,9 @@ async function playBoss(idx, total) {
   [C] = await solveMul(C, o.op, o.B);
   S.hud.step = '3. adım: 24 ÷ 4';
   o = await addOperand(C, '÷', 4);
-  await solveDiv(C, o.op, o.B);
+  const res = await solveDiv(C, o.op, o.B);
   S.hud.step = '';
-  await reveal(6);
+  await reveal(6, res);
   await clearStage();
 }
 async function intro() {
@@ -994,7 +1088,7 @@ async function intro() {
   await tween(S.title, { s: 1 }, 600, E.back);
   sfx.swoosh();
   await anim(850, t => { hero.x = -120 + (W / 2 + 120) * t; hero.hop = Math.sin(t * Math.PI) * 230 * U; hero.rot = t * Math.PI * 2; }, E.io);
-  hero.rot = 0; hero.hop = 0; hero.dir = 1; hero.sqy = .8; hero.sqx = 1.12; sfx.land(); tween(hero, { sqy: 1, sqx: 1 }, 320, E.back);
+  hero.rot = 0; hero.hop = 0; hero.dir = 1; hero.sqy = .8; hero.sqx = 1.12; sfx.land(); sfx.boom(); S.shake = 10 * U; ring(hero.x, G, 200, '#ffcf3f'); puff(hero.x - 25 * U, G, 6, -1); puff(hero.x + 25 * U, G, 6, 1); tween(hero, { sqy: 1, sqx: 1 }, 320, E.back);
   say('Merhaba! Ben Matematik Ninjası!', 1500);
   await wait(1700);
   const list = [['+', 'magnet', 'TOPLAMA', 'Mıknatıs', OPINFO['+'].color], ['−', 'hammer', 'ÇIKARMA', 'Çekiç', OPINFO['−'].color],
@@ -1027,10 +1121,12 @@ async function finale(total) {
   S.end = { s: 0, line1: `${total} soruyu birlikte çözdük!`, line2: 'Sen kaçını bildin? Yorumlara yaz!' };
   sfx.win(); tween(S.end, { s: 1 }, 600, E.back);
   heroRunTo(W / 2, 900, true);
-  for (let i = 0; i < 4; i++) { confetti(); await wait(450); }
+  for (let i = 0; i < 4; i++) { confetti(); firework(rand(W * .15, W * .85), rand(H * .1, H * .4)); await wait(450); }
+  (async () => { for (let i = 0; i < 8; i++) { firework(rand(W * .1, W * .9), rand(H * .08, H * .45)); await wait(600); } })();
   await heroCheer(); await heroCheer();
   say('Görüşürüz! Matematik eğlencelidir!', 2500);
   await wait(3000);
+  (async () => { for (let i = 0; ; i++) { firework(rand(W * .1, W * .9), rand(H * .08, H * .4)); if (i % 3 === 2) heroCheer(); await wait(rand(700, 1300)); } })();
 }
 async function playAll() {
   await intro();

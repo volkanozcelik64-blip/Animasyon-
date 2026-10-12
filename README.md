@@ -22,4 +22,5 @@ Ek kurulum yok. `index.html` dosyasını tarayıcıda açıp **▶ Başlat**'a y
 - **📱 Dikey (9:16)** mod: Shorts / Reels / TikTok için.
 - **⏺ Video Kaydet:** gösteriyi baştan oynatır ve bitince sesli `.webm` olarak indirir (Chrome / Edge).
 - Hız ayarı (0.75×–1.5×), duraklatma (Boşluk tuşu), müzik aç/kapa.
+- Efektler: kamera yakınlaştırma, darbe anında donma (hit-stop), anime hız çizgileri, renk ters çevirme flaşı, çizgi roman patlama balonları, ışık huzmeleri, toz bulutları, ateş ve yıldız izleri, sakura yaprakları, havai fişekler.
 - Tüm grafikler ve sesler kodla üretilir (Canvas + Web Audio); dış dosya yok.
