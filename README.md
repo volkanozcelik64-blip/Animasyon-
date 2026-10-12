@@ -1,7 +1,7 @@
-# Matematik Ninjası
+# Nod ile Matematik
 
-Dört işlemi bir ninjanın süper güçleriyle çözen, tarayıcıda çalışan matematik animasyonu.
-Sayılar yüzü olan sevimli karakterlerdir; ninja her işlemde farklı bir silah kullanır:
+Dört işlemi **Nod**'un (beyaz, kırmızı atkılı defter karakteri) süper güçleriyle çözdüğü, tarayıcıda çalışan matematik animasyonu.
+Sahne bir defter sayfası; sayılar kalın, elle çizilmiş rakamlardır ve Nod onlarla fiziksel olarak boğuşur ("Animator vs Math" tarzı). Her işlemde farklı bir alet kullanır:
 
 | İşlem | Silah | Ne oluyor? |
 |---|---|---|
@@ -10,7 +10,7 @@ Sayılar yüzü olan sevimli karakterlerdir; ninja her işlemde farklı bir sila
 | ✖️ Çarpma | Sihirli değnek | İkinci sayı yıldızlara dönüşür, her yıldız bir kopya yaratır (`4 + 4 + 4`), sonra hepsi birleşir. |
 | ➗ Bölme | Kılıç | Ninja tek hamlede sayıyı eşit parçalara keser, parçalar sonuca dönüşür. |
 
-Gösteri: giriş → 8 soru (her biri "Sen de düşün!" geri sayımıyla) → karışık **Boss sorusu** `(6 + 2) × 3 ÷ 4` → kapanış ("Sen kaçını bildin? Yorumlara yaz!").
+Gösteri: Nod yürüyerek gelir, el sallar ("Merhaba! Ben Nod.") ve zıplar → aletler tanıtılır → 8 soru (her biri "Sen de düşün!" geri sayımıyla) → karışık **Boss sorusu** `(6 + 2) × 3 ÷ 4` → kapanış ("Sen kaçını bildin? Yorumlara yaz!", göz kırpıp "Abone olmayı unutma!").
 
 ## Çalıştırma
 
