@@ -40,3 +40,19 @@ Akış: `1` → `1+1=2` → +1'lerle `=10`'a kadar sayma → mıknatısla `2+2+2
 python3 tools/build-video.py tools/video.tpl.html   # index.html'deki Nod çizimini alıp video.html'i üretir
 NODE_PATH=$(npm root -g) node tools/render-video.js $PWD/video.html $PWD/video/nod-ile-matematik.mp4
 ```
+
+## Video 2: Sayıların Sihri (`video2.html`)
+
+Dikey (9:16) ~90 saniyelik, konuşmasız kısa film. Beyaz zemin, koyu rakamlar, kırmızı vurgular; kahraman kırmızı atkılı çöp adam.
+Hazır video: [`video/sayilarin-sihri.mp4`](video/sayilarin-sihri.mp4) (1080×1920, 30 fps, sesli).
+
+Akış: gökten düşen Nod → `9 × 7 = 63`, 63'ün üstünde tepinince `6 + 3 = 9` → hızlanan turlar (`9 × 8`, `9 × 123`, `9 × 4567`, hep 9) →
+`142857` düşer, rakamlar çarka dönüşür, Nod hamster tekerleği gibi koşarken `×2 … ×6` hep aynı rakamlar → `×7` çarpar: `999999` →
+dokuz tane `1`, `111111111²` → Nod `12345678987654321` piramidine tırmanır → `0,9`'un peşinde sonsuz dokuzlar, sonunda `0,999… = 1` →
+kâğıt katlama `2⁰ … 2⁴²`, gökyüzü ve uzay, Nod Ay'a çarpar (≈ 439.805 km) → geri düşüp `1`'in üstüne konar, göz kırpar, havai fişekler.
+
+Efektler: darbede donma, RGB ayrışması, darbe çizgileri, flaş ve renk ters çevirme, sinema şeritleri, hız çizgileri, hareket bulanıklığı, rakam izleri, parçalanan rakamlar, film greni.
+
+```bash
+NODE_PATH=$(npm root -g) node tools/render-video.js $PWD/video2.html $PWD/video/sayilarin-sihri.mp4 1
+```

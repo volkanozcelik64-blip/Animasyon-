@@ -1,0 +1,1085 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Sayıların Sihri</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&family=Noto+Sans:wght@500;700&display=swap">
+<style>
+/* Beyaz sahne (dikey 9:16 canvas), altında küçük kumanda paneli. */
+:root{
+  --bg:#f1f1f4;
+  --panel:#ffffff;
+  --line:#d6d6de;
+  --fg:#16161f;
+  --muted:#6b6b78;
+  --accent:#e04848;
+  --on-accent:#ffffff;
+  --font-ui:"Fredoka","Arial Rounded MT Bold",Arial,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){--bg:#121216;--panel:#1c1c22;--line:#33333d;--fg:#f2f2f2;--muted:#9a9aa8;color-scheme:dark}
+}
+:root[data-theme="dark"]{--bg:#121216;--panel:#1c1c22;--line:#33333d;--fg:#f2f2f2;--muted:#9a9aa8;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font-ui);padding-inline:16px;padding-block:16px 28px}
+.app{max-width:900px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+.stage-wrap{width:min(100%,calc(80vh*9/16));margin:0 auto}
+canvas{display:block;width:100%;height:auto;border-radius:14px;border:1px solid var(--line);background:#fff;cursor:pointer}
+.controls{display:flex;flex-wrap:wrap;gap:10px;justify-content:center}
+button{font-family:var(--font-ui);font-size:1rem;font-weight:600;color:var(--fg);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 14px;cursor:pointer}
+button:hover{border-color:var(--fg)}
+button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.hint{color:var(--muted);font-size:.9rem;text-align:center;margin:0}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="stage-wrap"><canvas id="stage" aria-label="Sayıların Sihri animasyonu"></canvas></div>
+  <div class="controls">
+    <button id="btnPlay" class="primary">▶ Oynat</button>
+    <button id="btnPause">⏸ Duraklat</button>
+    <button id="btnMusic">🎵 Müzik: Açık</button>
+  </div>
+  <p class="hint">9 hilesi, 142857, 111111111², 0,999… = 1 ve Ay'a kadar katlanan kâğıt. Boşluk tuşu: duraklat/devam.</p>
+</div>
+<script>
+"use strict";
+const QS = new URLSearchParams(location.search);
+const RENDER = QS.has('render');
+const R = 1.5, W = 720, H = 1280;
+const INK = '#16161f', RED = '#e04848', PAPER = '#ffffff';
+const cv = document.getElementById('stage'), ctx = cv.getContext('2d');
+cv.width = W * R; cv.height = H * R;
+const EQF = (sz, w = 500) => `${w} ${Math.round(sz)}px "Noto Sans", "DejaVu Sans", Arial, sans-serif`;
+const rand = (a, b) => a + Math.random() * (b - a);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const circle = (x, y, r) => { ctx.beginPath(); ctx.arc(x, y, Math.max(0, r), 0, Math.PI * 2); };
+
+/* ---------- easing ve zaman çizelgesi ---------- */
+const E = {
+  lin: t => t,
+  io: t => t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2,
+  out: t => 1 - Math.pow(1 - t, 3),
+  in: t => t * t * t,
+  back: t => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); },
+  elastic: t => t === 0 ? 0 : t === 1 ? 1 : Math.pow(2, -10 * t) * Math.sin((t * 10 - .75) * (2 * Math.PI) / 3) + 1,
+};
+const jobs = [];
+function anim(dur, fn, ease = E.lin) { return new Promise(res => jobs.push({ t: 0, dur: Math.max(1, dur), fn, ease, res })); }
+function tween(o, to, dur, ease = E.io) { const from = {}; for (const k in to) from[k] = o[k]; return anim(dur, t => { for (const k in to) o[k] = from[k] + (to[k] - from[k]) * t; }, ease); }
+const wait = ms => anim(ms, () => { });
+function runJobs(dt) {
+  for (let i = 0; i < jobs.length; i++) {
+    const j = jobs[i]; j.t += dt; const p = Math.min(1, j.t / j.dur); j.fn(j.ease(p));
+    if (p >= 1) { jobs.splice(i, 1); i--; j.res(); }
+  }
+}
+
+/* ================== Ses ================== */
+let AC = null, master = null, musicGain = null, noiseBuf = null, musicOn = true, OFF = false, T0 = 0;
+const events = [];
+function setupAudio(c) {
+  AC = c; master = AC.createGain(); master.gain.value = .55; master.connect(AC.destination);
+  musicGain = AC.createGain(); musicGain.gain.value = .11; musicGain.connect(master);
+  noiseBuf = AC.createBuffer(1, AC.sampleRate, AC.sampleRate);
+  const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+}
+function initAudio() {
+  if (RENDER) return;
+  if (AC) { if (AC.state === 'suspended') AC.resume(); return; }
+  try { setupAudio(new (window.AudioContext || window.webkitAudioContext)()); } catch (e) { AC = null; }
+}
+const now = () => OFF ? T0 : AC.currentTime;
+function tone(f, d, { type = 'sine', vol = .3, to = null, delay = 0, dest = null } = {}) {
+  if (!AC) return; const t0 = now() + Math.max(0, delay);
+  const o = AC.createOscillator(), g = AC.createGain(); o.type = type;
+  o.frequency.setValueAtTime(f, t0); if (to) o.frequency.exponentialRampToValueAtTime(to, t0 + d);
+  g.gain.setValueAtTime(.0001, t0); g.gain.exponentialRampToValueAtTime(vol, t0 + .01); g.gain.exponentialRampToValueAtTime(.0001, t0 + d);
+  o.connect(g); g.connect(dest || master); o.start(t0); o.stop(t0 + d + .05);
+}
+function noise(d, { vol = .3, f = 1000, to = null, q = 1, type = 'bandpass', delay = 0, dest = null } = {}) {
+  if (!AC) return; const t0 = now() + Math.max(0, delay);
+  const s = AC.createBufferSource(); s.buffer = noiseBuf;
+  const fl = AC.createBiquadFilter(); fl.type = type; fl.Q.value = q; fl.frequency.setValueAtTime(f, t0);
+  if (to) fl.frequency.exponentialRampToValueAtTime(to, t0 + d);
+  const g = AC.createGain(); g.gain.setValueAtTime(.0001, t0); g.gain.exponentialRampToValueAtTime(vol, t0 + .01); g.gain.exponentialRampToValueAtTime(.0001, t0 + d);
+  s.connect(fl); fl.connect(g); g.connect(dest || master); s.start(t0); s.stop(t0 + d + .05);
+}
+const semi = (b, s) => b * Math.pow(2, s / 12);
+const SFX = {
+  pop: (p = 1) => tone(420 * p, .14, { to: 900 * p, vol: .25 }),
+  tick: () => tone(1100, .05, { type: 'square', vol: .06 }),
+  swoosh: () => noise(.22, { vol: .55, f: 500, to: 5000, q: .8 }),
+  boom: () => { tone(150, .6, { vol: .7, to: 40 }); noise(.45, { vol: .35, f: 500, to: 80, type: 'lowpass' }); },
+  bigboom: () => { tone(110, 1.4, { vol: .8, to: 30 }); noise(1.2, { vol: .45, f: 900, to: 50, type: 'lowpass' }); tone(55, 1.6, { type: 'triangle', vol: .4, to: 30 }); },
+  clang: () => { tone(1760, .6, { type: 'triangle', vol: .12, to: 1700 }); tone(2637, .4, { vol: .07 }); },
+  magic: () => [0, 4, 7, 12, 16].forEach((s, i) => tone(semi(523, s), .25, { type: 'triangle', vol: .12, delay: i * .06 })),
+  whistle: () => tone(1400, .9, { vol: .1, to: 300 }),
+  rise: () => tone(200, 1.2, { type: 'sawtooth', vol: .05, to: 1200 }),
+  win: () => [0, 4, 7, 12].forEach((s, i) => tone(semi(523, s), .4, { type: 'triangle', vol: .16, delay: i * .08 })),
+  land: () => noise(.12, { vol: .3, f: 220, type: 'lowpass' }),
+  ding: (p = 1) => { tone(880 * p, .3, { type: 'triangle', vol: .14 }); tone(1320 * p, .35, { type: 'sine', vol: .08, delay: .05 }); },
+  spin: () => noise(1.0, { vol: .18, f: 400, to: 2400, q: 3 }),
+  paper: () => noise(.18, { vol: .35, f: 2500, to: 1200, q: .7 }),
+  wobble: () => tone(300, .5, { type: 'sine', vol: .15, to: 120 }),
+};
+const sfx = {};
+for (const k in SFX) sfx[k] = (...a) => { if (RENDER) events.push({ t: vclock / 1000, k, a }); else SFX[k](...a); };
+const BPM = 112, ROOTS = [60, 57, 53, 55];
+const mhz = m => 440 * Math.pow(2, (m - 69) / 12);
+function musicStep(step, t) {
+  const delay = t - now(), i = step % 8, r = ROOTS[Math.floor(step / 8) % 4];
+  if (i % 4 === 0) tone(105, .18, { vol: .45, to: 40, delay, dest: musicGain });
+  if (i === 4) noise(.12, { vol: .18, f: 1800, delay, dest: musicGain });
+  if (i % 2 === 1) noise(.04, { vol: .1, f: 8000, type: 'highpass', delay, dest: musicGain });
+  if (i === 0 || i === 3 || i === 6) tone(mhz(r - 12), .22, { type: 'triangle', vol: .3, delay, dest: musicGain });
+  if (i % 2 === 0) tone(mhz(r + [0, 4, 7, 11][(step / 2) % 4 | 0] + 12), .15, { type: 'square', vol: .04, delay, dest: musicGain });
+}
+let nextNoteT = 0, mstep = 0;
+setInterval(() => {
+  if (RENDER || !AC || !musicOn || paused || !running) { if (AC && !RENDER) nextNoteT = AC.currentTime + .05; return; }
+  const spb = 60 / BPM / 2;
+  if (nextNoteT < AC.currentTime) nextNoteT = AC.currentTime + .05;
+  while (nextNoteT < AC.currentTime + .2) { musicStep(mstep++, nextNoteT); nextNoteT += spb; }
+}, 50);
+
+/* ================== Sahne durumu ================== */
+let S, hero, time = 0, vclock = 0, paused = false, started = false, running = false;
+function resetScene() {
+  jobs.length = 0;
+  S = { toks: [], parts: [], rings: [], eman: [], ghosts: [], syms: [], cam: { x: 0, y: -200, z: 1 }, shake: 0, flash: 0, flashColor: '#fff',
+    hitstop: 0, slow: 1, invert: 0, lines: null, bars: 0, chroma: 0, camV: 0, lastCam: null, sky: 0, wheel: null, paper: null, moon: null, stars: [], dots: [], end: 0 };
+  for (let i = 0; i < 160; i++) S.stars.push({ x: rand(-1, 1), y: rand(-1, 1), r: rand(.6, 2.2), tw: rand(0, 6) });
+  for (let i = 0; i < 30; i++) S.dots.push({ x: rand(0, W), y: rand(0, H), r: rand(2, 6), a: rand(.04, .1), v: rand(.006, .02) });
+  hero = makeHero();
+}
+
+/* ================== Karakter: kırmızı atkılı çöp adam ================== */
+// Açılar aşağıdan ölçülür, + yön = yüzünün baktığı taraf. Kol: omuz açısı + dirsek bükümü; bacak: kalça açısı + diz bükümü.
+const POSE = {
+  stand: { lean: 0, aBs: -.42, aBe: -.35, aFs: .42, aFe: .35, lBh: -.2, lBk: 0, lFh: .2, lFk: 0, head: 0 },
+  cheer: { lean: -.05, aBs: -2.55, aBe: -.25, aFs: 2.55, aFe: .25, lBh: -.25, lBk: 0, lFh: .25, lFk: 0, head: -.15 },
+  shock: { lean: -.28, aBs: -2.0, aBe: -.7, aFs: 2.0, aFe: .7, lBh: -.45, lBk: 0, lFh: .35, lFk: -.2, head: -.12 },
+  push: { lean: .5, aBs: 1.45, aBe: .15, aFs: 1.6, aFe: .1, lBh: -.65, lBk: 0, lFh: .45, lFk: -.55, head: .1 },
+  proud: { lean: -.06, aBs: -.75, aBe: -2.5, aFs: .75, aFe: 2.5, lBh: -.28, lBk: 0, lFh: .28, lFk: 0, head: -.18 },
+  scratch: { lean: 0, aBs: -.3, aBe: -.3, aFs: 2.5, aFe: 1.7, lBh: -.18, lBk: 0, lFh: .18, lFk: 0, head: .18 },
+  crouch: { lean: .35, aBs: -.9, aBe: -.4, aFs: -.6, aFe: -.4, lBh: 1.0, lBk: -1.7, lFh: 1.15, lFk: -1.8, head: -.1 },
+  air: { lean: .1, aBs: -2.4, aBe: -.4, aFs: 2.3, aFe: .5, lBh: .4, lBk: -1.4, lFh: 1.3, lFk: -1.1, head: -.1 },
+  stomp: { lean: .05, aBs: -1.5, aBe: -.6, aFs: 1.5, aFe: .6, lBh: -.1, lBk: 0, lFh: .9, lFk: -1.6, head: .2 },
+  punch: { lean: .35, aBs: -.9, aBe: 1.6, aFs: 1.65, aFe: 0, lBh: -.55, lBk: 0, lFh: .5, lFk: -.4, head: 0 },
+  uppercut: { lean: -.1, aBs: -.7, aBe: 1.4, aFs: 2.9, aFe: .1, lBh: -.4, lBk: 0, lFh: .35, lFk: -.3, head: -.3 },
+  tired: { lean: .7, aBs: .55, aBe: -.2, aFs: .6, aFe: -.1, lBh: -.1, lBk: .4, lFh: .5, lFk: -.6, head: .25 },
+  sit: { lean: -.15, aBs: -.9, aBe: -.3, aFs: .9, aFe: .2, lBh: 1.57, lBk: 0, lFh: 1.45, lFk: -.15, head: 0 },
+  wave: { lean: 0, aBs: -.42, aBe: -.35, aFs: 2.3, aFe: .6, lBh: -.2, lBk: 0, lFh: .2, lFk: 0, head: -.05 },
+  fold: { lean: .55, aBs: 1.2, aBe: .4, aFs: 1.3, aFe: .3, lBh: .9, lBk: -1.6, lFh: 1.1, lFk: -1.7, head: .15 },
+  flail: { lean: -.3, aBs: -2.8, aBe: -.9, aFs: 2.6, aFe: 1.2, lBh: -.7, lBk: -.6, lFh: .9, lFk: -.9, head: -.2 },
+};
+const PK = Object.keys(POSE.stand);
+const L = { th: 34, sh: 34, torso: 52, up: 28, fo: 26, neck: 6, hr: 20 };
+function makeHero() {
+  return { x: 0, y: 0, hop: 0, dir: 1, s: 1.25, rot: 0, sqx: 1, sqy: 1, alpha: 1, p: Object.assign({}, POSE.stand), run: 0, phase: 0,
+    eyes: 'dot', mouth: 'smile', blink: 0, lastX: 0, vx: 0, vy: 0, lastY: 0, ghost: false, sweat: 0, scarfT: 0, wiggle: 0 };
+}
+function pose(name, dur = 220, ease = E.out) { return tween(hero.p, POSE[name], dur, ease); }
+function face(eyes, mouth) { hero.eyes = eyes; hero.mouth = mouth; }
+const seg = (x, y, a, l) => ({ x: x + Math.sin(a) * l, y: y + Math.cos(a) * l });
+function rig(h) {
+  const p = Object.assign({}, h.p);
+  if (h.run > 0) {
+    const ph = h.phase, r = h.run, sp = Math.sin(ph);
+    const run = { lean: .3, aBs: sp * 1.0, aBe: 1.4, aFs: -sp * 1.0, aFe: 1.4, lBh: Math.sin(ph) * .9, lBk: -.2 - 1.2 * Math.max(0, Math.sin(ph + 1.7)), lFh: -Math.sin(ph) * .9, lFk: -.2 - 1.2 * Math.max(0, Math.sin(ph + 1.7 + Math.PI)), head: 0 };
+    for (const k of PK) p[k] = lerp(p[k], run[k], r);
+  }
+  const legs = ['B', 'F'].map(s => { const k = seg(0, 0, p['l' + s + 'h'], L.th); const f = seg(k.x, k.y, p['l' + s + 'h'] + p['l' + s + 'k'], L.sh); return { k, f }; });
+  const hipH = Math.max(legs[0].f.y, legs[1].f.y);
+  const hip = { x: 0, y: -hipH };
+  const neck = seg(hip.x, hip.y, Math.PI - p.lean, L.torso);
+  const head = seg(neck.x, neck.y, Math.PI - p.lean - p.head, L.neck + L.hr);
+  const sh = seg(hip.x, hip.y, Math.PI - p.lean, L.torso - 4);
+  const arms = ['B', 'F'].map(s => { const e = seg(sh.x, sh.y, p['a' + s + 's'], L.up); const w = seg(e.x, e.y, p['a' + s + 's'] + p['a' + s + 'e'], L.fo); return { e, w }; });
+  return { p, legs: legs.map(l => ({ k: { x: l.k.x, y: l.k.y + hip.y }, f: { x: l.f.x, y: l.f.y + hip.y } })), hip, neck, head, sh, arms };
+}
+function heroPt(name) { // dünya koordinatında bir eklem
+  const h = hero, r = rig(h); let pt = name === 'hand' ? r.arms[1].w : name === 'head' ? r.head : name === 'foot' ? r.legs[1].f : r.hip;
+  return { x: h.x + pt.x * h.dir * h.s, y: h.y - h.hop + pt.y * h.s };
+}
+function drawHero(h, alpha = 1, ghost = false) {
+  if (h.alpha <= 0) return;
+  const r = rig(h);
+  ctx.save(); ctx.globalAlpha *= alpha * h.alpha;
+  ctx.translate(h.x, h.y - h.hop);
+  const midY = r.hip.y * h.s;
+  ctx.translate(0, midY); ctx.rotate(h.rot); ctx.translate(0, -midY);
+  ctx.scale(h.s * h.dir * h.sqx, h.s * h.sqy);
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  const col = ghost ? '#9aa7c7' : INK;
+  ctx.strokeStyle = col; ctx.lineWidth = 5.5;
+  const line = (...pts) => { ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y); for (const q of pts.slice(1)) ctx.lineTo(q.x, q.y); ctx.stroke(); };
+  // arka bacak + kol
+  line(r.hip, r.legs[0].k, r.legs[0].f);
+  line(r.sh, r.arms[0].e, r.arms[0].w);
+  // gövde
+  line(r.hip, r.neck);
+  // atkı kuyruğu (hıza göre arkaya savrulur)
+  if (!ghost) {
+    const sp = clamp(Math.abs(h.vx) * 1.4 + Math.abs(h.vy) * .6, 0, 1);
+    const back = Math.sign(h.vx) === h.dir || Math.abs(h.vx) < .02 ? 1 : -1;
+    const base = { x: r.sh.x + 4, y: r.sh.y + 2 };
+    const ang = lerp(.1, -(Math.PI / 2 - .25) * back, sp) + (h.vy < -.3 ? .3 : 0);
+    const wv = Math.sin(h.scarfT * .02) * (.08 + .25 * sp);
+    const a1 = seg(base.x, base.y, ang + wv, 20), a2 = seg(a1.x, a1.y, ang - wv * 1.6, 18);
+    ctx.strokeStyle = RED; ctx.lineCap = 'butt'; ctx.lineWidth = 13;
+    line(base, a1, a2);
+    // boyun bandı
+    ctx.lineCap = 'round'; ctx.lineWidth = 11;
+    const nb = seg(r.neck.x, r.neck.y, Math.PI - r.p.lean, -6);
+    ctx.beginPath(); ctx.moveTo(nb.x - 19, nb.y - 3); ctx.quadraticCurveTo(nb.x, nb.y + 9, nb.x + 19, nb.y - 3); ctx.stroke();
+    ctx.strokeStyle = col; ctx.lineCap = 'round'; ctx.lineWidth = 5.5;
+  }
+  // ön bacak + kol
+  line(r.hip, r.legs[1].k, r.legs[1].f);
+  line(r.sh, r.arms[1].e, r.arms[1].w);
+  // kafa
+  ctx.save(); ctx.translate(r.head.x, r.head.y); ctx.rotate(r.p.lean + r.p.head);
+  circle(0, 0, L.hr); ctx.fillStyle = ghost ? 'rgba(255,255,255,.3)' : '#fff'; ctx.fill(); ctx.stroke();
+  if (!ghost) drawFace(h);
+  ctx.restore();
+  ctx.restore();
+}
+function drawFace(h) {
+  ctx.fillStyle = INK; ctx.strokeStyle = INK; ctx.lineWidth = 3;
+  const ex = [-4, 8], ey = -3, blink = h.blink > 0;
+  for (let i = 0; i < 2; i++) {
+    const x = ex[i];
+    if (blink || h.eyes === 'happy') { ctx.beginPath(); ctx.arc(x, ey + 2, 3.2, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke(); }
+    else if (h.eyes === 'wide') { circle(x, ey, 5); ctx.fillStyle = '#fff'; ctx.fill(); ctx.stroke(); circle(x + 1, ey, 1.8); ctx.fillStyle = INK; ctx.fill(); }
+    else if (h.eyes === 'wink' && i === 1) { ctx.beginPath(); ctx.moveTo(x - 3.5, ey); ctx.lineTo(x + 3.5, ey); ctx.stroke(); }
+    else if (h.eyes === 'x') { ctx.beginPath(); ctx.moveTo(x - 3, ey - 3); ctx.lineTo(x + 3, ey + 3); ctx.moveTo(x + 3, ey - 3); ctx.lineTo(x - 3, ey + 3); ctx.stroke(); }
+    else if (h.eyes === 'angry') { circle(x, ey + 1, 3); ctx.fill(); ctx.beginPath(); ctx.moveTo(x - 4, ey - 6 + (i ? 2 : -1)); ctx.lineTo(x + 4, ey - 6 + (i ? -1 : 2)); ctx.stroke(); }
+    else { circle(x, ey, 3.3); ctx.fill(); }
+  }
+  ctx.beginPath();
+  if (h.mouth === 'o') { ctx.ellipse(3, 9, 3.5, 4.5, 0, 0, Math.PI * 2); ctx.stroke(); }
+  else if (h.mouth === 'flat') { ctx.moveTo(-2, 9); ctx.lineTo(8, 9); ctx.stroke(); }
+  else if (h.mouth === 'grin') { ctx.moveTo(-5, 5); ctx.quadraticCurveTo(3, 16, 11, 5); ctx.closePath(); ctx.fillStyle = INK; ctx.fill(); }
+  else if (h.mouth === 'frown') { ctx.arc(3, 13, 5, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke(); }
+  else if (h.mouth === 'wavy') { ctx.moveTo(-3, 9); for (let i = 0; i <= 6; i++) ctx.lineTo(-3 + i * 2, 9 + (i % 2 ? -1.5 : 1.5)); ctx.stroke(); }
+  else { ctx.arc(3, 4, 6.5, Math.PI * .2, Math.PI * .8); ctx.stroke(); }
+  if (h.sweat > 0) { ctx.fillStyle = '#5cb7ff'; ctx.globalAlpha *= h.sweat; ctx.beginPath(); ctx.moveTo(-17, -12); ctx.quadraticCurveTo(-23, -2, -17, -1); ctx.quadraticCurveTo(-11, -2, -17, -12); ctx.fill(); }
+}
+function sym(ch, dur = 700, color = RED) { // başın üstünde ! veya ?
+  const s = { ch, s: 0, a: 1, color, rot: rand(-.2, .2), t: 0 }; S.syms.push(s);
+  (async () => { await tween(s, { s: 1 }, 220, E.back); await wait(dur); await tween(s, { a: 0 }, 200); S.syms = S.syms.filter(q => q !== s); })();
+}
+function drawSyms() {
+  if (!S.syms.length) return;
+  const hd = heroPt('head');
+  S.syms.forEach((s, i) => {
+    ctx.save(); ctx.globalAlpha = s.a; ctx.translate(hd.x + (i - (S.syms.length - 1) / 2) * 34 + 6 * hero.dir, hd.y - 44 * hero.s - 18); ctx.rotate(s.rot + Math.sin(time * .01) * .06); ctx.scale(s.s, s.s);
+    ctx.font = EQF(54, 700); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+    ctx.lineWidth = 8; ctx.strokeStyle = '#fff'; ctx.strokeText(s.ch, 0, 0); ctx.fillStyle = s.color; ctx.fillText(s.ch, 0, 0);
+    ctx.restore();
+  });
+}
+// hareketler
+function runTo(x, dur, ease = E.io) {
+  hero.dir = x >= hero.x ? 1 : -1; hero.run = 1;
+  return tween(hero, { x }, dur, ease).then(() => { tween(hero, { run: 0 }, 150); });
+}
+async function jumpTo(x, y, dur = 500, h = 120, land = true) {
+  const x0 = hero.x, y0 = hero.y - hero.hop; hero.hop = 0; hero.y = y0;
+  if (x !== x0) hero.dir = x > x0 ? 1 : -1;
+  await pose('crouch', 90); hero.run = 0;
+  pose('air', 160);
+  sfx.swoosh();
+  await anim(dur, k => { hero.x = lerp(x0, x, k); hero.y = lerp(y0, y, k) - Math.sin(Math.PI * k) * h - (Math.min(y, y0) < y0 && y < y0 ? 0 : 0); }, E.lin);
+  hero.y = y;
+  if (land) await landFx();
+}
+async function landFx(big = false) {
+  sfx.land(); puff(hero.x, hero.y, big ? 10 : 5);
+  hero.sqx = 1.25; hero.sqy = .78; tween(hero, { sqx: 1, sqy: 1 }, 380, E.elastic);
+  await pose('crouch', 80); await pose('stand', 220);
+}
+
+/* ================== Rakamlar (token) ================== */
+function tok(txt, x, y, o = {}) {
+  const t = Object.assign({ txt, x, y, size: 140, s: 1, sx: 1, sy: 1, rot: 0, alpha: 1, color: INK, glow: 0, trail: true, w: 500, sup: null }, o);
+  S.toks.push(t); return t;
+}
+const untok = t => { S.toks = S.toks.filter(q => q !== t); };
+function twOf(t) { ctx.font = EQF(t.size, t.w); return ctx.measureText(t.txt).width; }
+function row(toks, cx, gap = .08) { // yatay ortala, x değerlerini döndür
+  const ws = toks.map(twOf), g = (toks[0] ? toks[0].size : 100) * gap;
+  const total = ws.reduce((a, b) => a + b, 0) + g * (toks.length - 1);
+  let acc = cx - total / 2; return ws.map(w => { const v = acc + w / 2; acc += w + g; return v; });
+}
+function layoutRow(toks, cx, dur = 350, gap) { const xs = row(toks, cx, gap); return Promise.all(toks.map((t, i) => dur ? tween(t, { x: xs[i] }, dur, E.io) : (t.x = xs[i]))); }
+function setTxt(t, txt) { t.txt = txt; t.s = 1.35; t.glow = 1; sfx.ding(); return tween(t, { s: 1, glow: 0 }, 450, E.back); }
+async function popTok(txt, x, y, o = {}) {
+  const t = tok(txt, x, y, Object.assign({ s: 0 }, o)); sfx.pop(o.pitch || 1);
+  burst(x, y - t.size * .35, 10, { speed: .3 });
+  await tween(t, { s: 1 }, 300, E.back); return t;
+}
+async function dropTok(t, y, dur = 420) { await tween(t, { y }, dur, E.in); sfx.land(); puff(t.x, y, 4); S.shake = Math.max(S.shake, 6); squash(t); }
+function squash(t) { t.sx = 1.25; t.sy = .75; return tween(t, { sx: 1, sy: 1 }, 450, E.elastic); }
+function fallAway(t, delay = 0) {
+  return wait(delay).then(() => { const vx = rand(-.3, .3), r = rand(-3, 3), x0 = t.x, y0 = t.y; return anim(1100, k => { t.y = y0 + 1500 * k * k - Math.sin(Math.PI * k) * 80; t.x = x0 + vx * 900 * k; t.rot = r * k; }); }).then(() => untok(t));
+}
+function shatter(t, n = 14) { // rakamı parçalara ayır
+  untok(t);
+  const cy = t.y - t.size * .36;
+  for (let i = 0; i < n; i++) S.parts.push({ x: t.x + rand(-t.size * .25, t.size * .25), y: cy + rand(-t.size * .3, t.size * .3), vx: rand(-.5, .5), vy: rand(-.7, -.1), g: .0018, life: rand(700, 1200), age: 0, size: rand(8, 18), color: t.color, shape: 'shard', rot: rand(0, 6), vr: rand(-.02, .02) });
+}
+function drawTok(t) {
+  if (t.s <= .001 || t.alpha <= 0) return;
+  ctx.save(); ctx.globalAlpha *= t.alpha;
+  const cy = t.y - t.size * .36;
+  ctx.translate(t.x, cy); ctx.rotate(t.rot); ctx.scale(t.s * t.sx, t.s * t.sy); ctx.translate(0, t.size * .36);
+  ctx.font = EQF(t.size, t.w); ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+  if (t.glow > 0) { ctx.shadowColor = RED; ctx.shadowBlur = 50 * t.glow; }
+  ctx.fillStyle = t.color; ctx.fillText(t.txt, 0, 0); ctx.shadowBlur = 0;
+  if (t.sup) { ctx.font = EQF(t.size * .5, t.w); ctx.textAlign = 'left'; ctx.fillStyle = t.supColor || t.color; ctx.fillText(t.sup, twOf(t) / 2 + t.size * .04, -t.size * .5); }
+  ctx.restore();
+}
+const tokTop = t => t.y - t.size * .73 * t.s;
+
+/* ================== Efektler ================== */
+function burst(x, y, n, o = {}) {
+  const cols = o.colors || [INK, RED, '#ffb703', '#8ecae6'];
+  for (let i = 0; i < n; i++) {
+    const a = o.dir !== undefined ? o.dir + (Math.random() - .5) * (o.spread || 1) : Math.random() * Math.PI * 2;
+    const sp = (o.speed || .5) * (.4 + Math.random());
+    S.parts.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - (o.up || 0), g: o.g ?? .0012, life: (o.life || 800) * rand(.6, 1.2), age: 0,
+      size: (o.size || 6) * rand(.6, 1.4), color: cols[i % cols.length], shape: o.shape || 'circle', rot: rand(0, 6), vr: rand(-.02, .02) });
+  }
+}
+function puff(x, y, n = 6, dir = 0) {
+  for (let i = 0; i < n; i++) S.parts.push({ x: x + rand(-14, 14), y: y - rand(0, 8), vx: (dir || (Math.random() - .5) * 2) * rand(.05, .22), vy: -rand(.01, .07), g: -.00003, life: rand(450, 750), age: 0,
+    size: rand(8, 16), color: 'rgba(60,60,80,.22)', shape: 'puff', rot: 0, vr: 0 });
+}
+function ring(x, y, max = 220, color = INK) { S.rings.push({ x, y, age: 0, life: 520, max, color }); }
+function emanata(x, y, n = 16, r0 = 60, r1 = 170) { S.eman.push({ x, y, n, r0, r1, age: 0, life: 380, rot: rand(0, 6) }); }
+function impact(x, y, o = {}) {
+  (o.big ? sfx.bigboom : sfx.boom)(); S.shake = Math.max(S.shake, o.shake ?? 16); S.flash = o.flash ?? .4; S.flashColor = o.flashColor || '#fff';
+  const rg = o.ring || 240; ring(x, y, rg, o.ringColor || INK); emanata(x, y, 16, rg * .25, rg * .8);
+  burst(x, y, o.n || 30, { speed: .7, shape: 'star', colors: o.colors });
+  S.chroma = Math.max(S.chroma, o.chroma ?? 7);
+}
+function speedLines(dur = 700, dir = null) { S.lines = { a: 1, dir }; const l = S.lines; wait(dur).then(() => tween(l, { a: 0 }, 300)).then(() => { if (S.lines === l) S.lines = null; }); }
+function hitStop(ms = 100, inv = 0) { S.hitstop = ms; S.invert = inv; }
+function camTo(x, y, z, dur = 400, ease = E.io) { return tween(S.cam, { x, y, z }, dur, ease); }
+function camPunch(dz = 1.12) { const z = S.cam.z; tween(S.cam, { z: z * dz }, 80, E.out).then(() => tween(S.cam, { z }, 500)); }
+function firework(x, y) {
+  const c = [RED, '#ffb703', '#219ebc', '#8338ec', '#06d6a0'][Math.floor(rand(0, 5))];
+  burst(x, y, 44, { colors: [c, INK, c], speed: .42, g: .00025, life: 1500, size: 4 });
+  burst(x, y, 10, { colors: [c], speed: .2, shape: 'star', life: 900, g: 0 });
+  ring(x, y, 150, c); noise(.3, { vol: .25, f: 2500, to: 600 }); tone(200, .25, { vol: .2, to: 60 });
+}
+
+function drawParts() {
+  for (const p of S.parts) {
+    const k = 1 - p.age / p.life; if (k <= 0) continue;
+    ctx.save(); ctx.globalAlpha = Math.min(1, k * 1.5); ctx.fillStyle = p.color; ctx.strokeStyle = p.color; ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+    if (p.shape === 'star') { ctx.beginPath(); for (let i = 0; i < 10; i++) { const a = i / 10 * Math.PI * 2, r = (i % 2 ? .45 : 1) * p.size; ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); } ctx.closePath(); ctx.fill(); }
+    else if (p.shape === 'spark') { ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-p.vx * 40, -p.vy * 40); ctx.stroke(); }
+    else if (p.shape === 'puff') { circle(0, 0, p.size * (1.6 - k * .6)); ctx.fill(); }
+    else if (p.shape === 'shard') { ctx.beginPath(); ctx.moveTo(-p.size * .5, -p.size * .3); ctx.lineTo(p.size * .6, -p.size * .1); ctx.lineTo(-p.size * .1, p.size * .5); ctx.closePath(); ctx.fill(); }
+    else if (p.shape === 'rect') ctx.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2);
+    else if (p.shape === 'digit') { ctx.font = EQF(p.size, 700); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(p.txt, 0, 0); }
+    else { circle(0, 0, p.size * k); ctx.fill(); }
+    ctx.restore();
+  }
+  for (const r of S.rings) { const k = r.age / r.life; ctx.globalAlpha = 1 - k; ctx.strokeStyle = r.color; ctx.lineWidth = 8 * (1 - k) + 1; circle(r.x, r.y, r.max * E.out(k)); ctx.stroke(); }
+  ctx.globalAlpha = 1;
+  ctx.save(); ctx.strokeStyle = INK; ctx.lineCap = 'round';
+  for (const e of S.eman) {
+    const p = e.age / e.life, ra = e.r0 + (e.r1 - e.r0) * E.out(p), rb = ra + 38 * (1 - p);
+    ctx.globalAlpha = 1 - p; ctx.lineWidth = 6 * (1 - p) + 1;
+    for (let i = 0; i < e.n; i++) { const a = e.rot + i / e.n * Math.PI * 2; ctx.beginPath(); ctx.moveTo(e.x + Math.cos(a) * ra, e.y + Math.sin(a) * ra); ctx.lineTo(e.x + Math.cos(a) * rb, e.y + Math.sin(a) * rb); ctx.stroke(); }
+  }
+  ctx.restore();
+}
+function drawLines() { // ekran kenarında anime hız çizgileri
+  const l = S.lines; if (!l) return;
+  ctx.save(); ctx.globalAlpha = l.a * .55; ctx.strokeStyle = S.sky > 1.3 ? '#fff' : INK; ctx.lineCap = 'round';
+  for (let i = 0; i < 46; i++) {
+    const a = rand(0, Math.PI * 2), r0 = rand(.42, .55) * H, r1 = H;
+    if (l.dir === 'v') { const x = rand(0, W), y = rand(0, H), len = rand(80, 260); if (Math.abs(x - W / 2) < W * .22) continue; ctx.lineWidth = rand(1, 4); ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + len); ctx.stroke(); continue; }
+    ctx.lineWidth = rand(1, 5); ctx.beginPath(); ctx.moveTo(W / 2 + Math.cos(a) * r0, H / 2 + Math.sin(a) * r0 * .9); ctx.lineTo(W / 2 + Math.cos(a) * r1, H / 2 + Math.sin(a) * r1); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/* ================== Arka plan: beyaz → gökyüzü → uzay ================== */
+function skyColors() {
+  const s = S.sky;
+  const stops = [['#ffffff', '#e9e9ef'], ['#bfe3ff', '#eaf6ff'], ['#0b1030', '#24305e'], ['#03040c', '#0b1030']];
+  const i = Math.min(2, Math.floor(s)), f = s - i;
+  const m = (a, b) => { const A = parseInt(a.slice(1), 16), B = parseInt(b.slice(1), 16); const c = [16, 8, 0].map(sh => Math.round(lerp((A >> sh) & 255, (B >> sh) & 255, f))); return `rgb(${c.join(',')})`; };
+  return [m(stops[i][0], stops[i + 1][0]), m(stops[i][1], stops[i + 1][1])];
+}
+function drawBG() {
+  const [c0, c1] = skyColors();
+  if (S.sky < .05) {
+    const g = ctx.createRadialGradient(W / 2, H * .45, 0, W / 2, H * .45, H * .8); g.addColorStop(0, c0); g.addColorStop(1, c1); ctx.fillStyle = g;
+  } else { const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, c1 === c0 ? c0 : (S.sky > 1 ? c0 : c1)); g.addColorStop(1, S.sky > 1 ? c1 : c0); ctx.fillStyle = g; }
+  ctx.fillRect(0, 0, W, H);
+  if (S.sky > 1.2) { // yıldızlar
+    const a = clamp((S.sky - 1.2) / .8, 0, 1);
+    for (const st of S.stars) { ctx.globalAlpha = a * (.5 + .5 * Math.sin(time * .003 + st.tw)); ctx.fillStyle = '#fff'; const x = ((st.x * W - S.cam.x * .05) % W + W) % W, y = ((st.y * H - S.cam.y * .05) % H + H) % H; circle(x, y, st.r); ctx.fill(); }
+    ctx.globalAlpha = 1;
+  }
+  if (S.sky < .6) for (const d of S.dots) { ctx.globalAlpha = d.a * (1 - S.sky / .6); ctx.fillStyle = '#9aa0b8'; circle(d.x, d.y, d.r); ctx.fill(); }
+  ctx.globalAlpha = 1;
+}
+
+/* ================== 142857 çarkı ================== */
+function drawWheel() {
+  const w = S.wheel; if (!w || w.a <= 0) return;
+  ctx.save(); ctx.globalAlpha = w.a; ctx.translate(w.x, w.y);
+  ctx.strokeStyle = INK; ctx.lineWidth = 7; circle(0, 0, w.r * w.s); ctx.stroke();
+  ctx.lineWidth = 3; ctx.globalAlpha = w.a * .25; circle(0, 0, w.r * w.s - 70); ctx.stroke(); ctx.globalAlpha = w.a;
+  for (let i = 0; i < 6; i++) { // tekerlek telleri
+    const a = w.rot + i / 6 * Math.PI * 2 + Math.PI / 6; ctx.globalAlpha = w.a * .2; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a) * (w.r * w.s - 70), Math.sin(a) * (w.r * w.s - 70)); ctx.stroke();
+  }
+  ctx.globalAlpha = w.a;
+  const D = '142857';
+  for (let i = 0; i < 6; i++) {
+    const a = w.rot + i / 6 * Math.PI * 2 - Math.PI / 2;
+    const rr = (w.r - 36) * w.s;
+    ctx.save(); ctx.translate(Math.cos(a) * rr, Math.sin(a) * rr); ctx.rotate(a + Math.PI / 2);
+    ctx.font = EQF(78, 700); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const top = Math.abs(((a + Math.PI / 2) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2)) < .35 || Math.abs(((a + Math.PI / 2) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI * 2) < .35;
+    ctx.fillStyle = top && w.hl ? RED : INK; ctx.fillText(D[i], 0, 0); ctx.restore();
+  }
+  // tepe işareti
+  if (w.hl) { ctx.fillStyle = RED; ctx.beginPath(); ctx.moveTo(0, -w.r * w.s - 14); ctx.lineTo(-14, -w.r * w.s - 38); ctx.lineTo(14, -w.r * w.s - 38); ctx.closePath(); ctx.fill(); }
+  ctx.restore();
+}
+
+/* ================== Kâğıt yığını ve Ay ================== */
+function drawPaper() {
+  const p = S.paper; if (!p || p.a <= 0) return;
+  ctx.save(); ctx.globalAlpha = p.a;
+  const top = p.y - p.h;
+  // katmanlar
+  ctx.fillStyle = '#fbfbf7'; ctx.fillRect(p.x - p.w / 2, top, p.w, p.h);
+  ctx.strokeStyle = INK; ctx.lineWidth = 4; ctx.strokeRect(p.x - p.w / 2, top, p.w, p.h);
+  const n = Math.min(64, p.layers), step = p.h / n;
+  ctx.lineWidth = 1.5; ctx.globalAlpha = p.a * .35;
+  if (step > 3) for (let i = 1; i < n; i++) { ctx.beginPath(); ctx.moveTo(p.x - p.w / 2, top + i * step); ctx.lineTo(p.x + p.w / 2, top + i * step); ctx.stroke(); }
+  ctx.globalAlpha = p.a;
+  // katlanan yarım
+  if (p.flip > 0 && p.flip < 1) {
+    const ang = Math.PI * p.flip, hw = p.w / 2, th = Math.max(6, p.fh);
+    ctx.save(); ctx.translate(p.x, top); ctx.scale(Math.cos(ang), 1);
+    ctx.fillStyle = '#fbfbf7'; ctx.fillRect(0, -th, hw, th); ctx.strokeStyle = INK; ctx.lineWidth = 4; ctx.strokeRect(0, -th, hw, th);
+    ctx.restore();
+  }
+  ctx.restore();
+}
+function drawMoon() {
+  const m = S.moon; if (!m) return;
+  ctx.save(); ctx.translate(m.x, m.y); ctx.rotate(m.rot || 0);
+  const g = ctx.createRadialGradient(-m.r * .3, -m.r * .3, m.r * .1, 0, 0, m.r); g.addColorStop(0, '#f4f4f0'); g.addColorStop(1, '#b8b8c4');
+  ctx.shadowColor = 'rgba(255,255,230,.6)'; ctx.shadowBlur = 80; circle(0, 0, m.r); ctx.fillStyle = g; ctx.fill(); ctx.shadowBlur = 0;
+  ctx.fillStyle = 'rgba(110,110,130,.35)';
+  for (const [cx, cy, cr] of [[-.35, -.2, .18], [.3, .25, .22], [.1, -.45, .12], [-.2, .45, .14], [.5, -.15, .09]]) { circle(cx * m.r, cy * m.r, cr * m.r); ctx.fill(); }
+  ctx.restore();
+}
+
+/* ================== Ekran sonrası efektler ================== */
+let grain, prevC, tmpA, tmpB;
+const mkCanvas = () => { const c = document.createElement('canvas'); c.width = cv.width; c.height = cv.height; return c; };
+function fxInit() {
+  grain = document.createElement('canvas'); grain.width = grain.height = 256;
+  const g = grain.getContext('2d'), im = g.createImageData(256, 256);
+  for (let i = 0; i < im.data.length; i += 4) { const v = Math.random() * 255; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
+  g.putImageData(im, 0, 0);
+  prevC = mkCanvas(); tmpA = mkCanvas(); tmpB = mkCanvas();
+}
+function applyChroma(d) {
+  const a = tmpA.getContext('2d'), b = tmpB.getContext('2d');
+  for (const [c, col] of [[a, '#ff0000'], [b, '#00ffff']]) { c.globalCompositeOperation = 'source-over'; c.drawImage(cv, 0, 0); c.globalCompositeOperation = 'multiply'; c.fillStyle = col; c.fillRect(0, 0, cv.width, cv.height); c.globalCompositeOperation = 'source-over'; }
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#000'; ctx.fillRect(0, 0, cv.width, cv.height);
+  ctx.globalCompositeOperation = 'lighter'; ctx.drawImage(tmpA, d, 0); ctx.drawImage(tmpB, -d, 0); ctx.globalCompositeOperation = 'source-over';
+}
+function postFX() {
+  if (S.chroma > .4) applyChroma(Math.round(S.chroma * R));
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  const blur = S.noBlur ? 0 : clamp(S.camV * .8 + (hero.ghost ? .3 : 0), 0, .5);
+  if (blur > .03) { ctx.globalAlpha = blur; ctx.drawImage(prevC, 0, 0); ctx.globalAlpha = 1; }
+  prevC.getContext('2d').drawImage(cv, 0, 0);
+  ctx.setTransform(R, 0, 0, R, 0, 0);
+  if (S.bars > .01) { const bh = H * .1 * S.bars; ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, bh); ctx.fillRect(0, H - bh, W, bh); }
+  ctx.save(); ctx.globalAlpha = .05; ctx.globalCompositeOperation = 'overlay';
+  const ox = Math.floor(rand(0, 256)), oy = Math.floor(rand(0, 256));
+  for (let x = -ox; x < W; x += 256) for (let y = -oy; y < H; y += 256) ctx.drawImage(grain, x, y);
+  ctx.restore();
+}
+
+function drawHud() { // ekrana sabit sayaç (kâğıt sahnesi)
+  const h = S.hud; if (!h || h.a <= .01) return;
+  ctx.save(); ctx.globalAlpha = h.a; ctx.textBaseline = 'alphabetic'; ctx.lineJoin = 'round';
+  const dark = S.sky > 1.2, fg = dark ? '#fff' : INK, st = dark ? 'rgba(0,0,0,.5)' : 'rgba(255,255,255,.8)';
+  ctx.translate(W / 2, h.y); ctx.scale(h.s, h.s);
+  ctx.font = EQF(130, 700); const bw = ctx.measureText('2').width; ctx.font = EQF(72, 700); const ew = ctx.measureText(h.exp).width;
+  const x0 = -(bw + ew) / 2;
+  ctx.lineWidth = 12; ctx.strokeStyle = st;
+  ctx.font = EQF(130, 700); ctx.textAlign = 'left'; ctx.strokeText('2', x0, 0); ctx.fillStyle = fg; ctx.fillText('2', x0, 0);
+  ctx.font = EQF(72, 700); ctx.strokeText(h.exp, x0 + bw + 4, -64); ctx.fillStyle = RED; ctx.fillText(h.exp, x0 + bw + 4, -64);
+  ctx.font = EQF(54, 700); ctx.textAlign = 'center'; ctx.strokeText(h.label, 0, 80); ctx.fillStyle = fg; ctx.fillText(h.label, 0, 80);
+  ctx.restore();
+}
+
+/* ================== Döngü ================== */
+function update(dt) {
+  runJobs(dt);
+  const h = hero;
+  h.vx = dt ? (h.x - h.lastX) / dt : 0; h.vy = dt ? ((h.y - h.hop) - h.lastY) / dt : 0; h.lastX = h.x; h.lastY = h.y - h.hop;
+  h.phase += (h.run > 0 ? Math.max(Math.abs(h.vx), .35) : 0) * dt * .045 * (h.runSpeed || 1);
+  h.scarfT += dt; h.blink -= dt;
+  if (!h.noBlink && Math.random() < dt * .0004) h.blink = 120;
+  if (h.ghost && dt > 0) S.ghosts.push({ h: JSON.parse(JSON.stringify({ x: h.x, y: h.y, hop: h.hop, dir: h.dir, s: h.s, rot: h.rot, sqx: h.sqx, sqy: h.sqy, p: rig(h).p, run: 0, phase: 0, alpha: 1 })), a: .55 });
+  S.ghosts.forEach(g => g.a -= dt * .003); S.ghosts = S.ghosts.filter(g => g.a > 0);
+  if (h.run > .5 && h.hop < 2 && Math.random() < dt * .012 && !h.noDust) puff(h.x - h.dir * 12, h.y, 1, -h.dir);
+  for (const t of S.toks) {
+    if (t.px !== undefined && dt > 0 && t.trail) {
+      const sp = Math.hypot(t.x - t.px, t.y - t.py) / dt;
+      if (sp > .6 && t.s > .3) S.parts.push({ x: t.x, y: t.y - t.size * .36, vx: 0, vy: 0, g: 0, life: 220, age: 0, size: t.size * t.s, color: 'rgba(224,72,72,.35)', shape: 'digit', txt: t.txt, rot: t.rot, vr: 0 });
+    }
+    t.px = t.x; t.py = t.y;
+  }
+  for (const d of S.dots) { d.y -= d.v * dt; if (d.y < -10) { d.y = H + 10; d.x = rand(0, W); } }
+  for (const p of S.parts) { p.age += dt; p.vy += p.g * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt; }
+  S.parts = S.parts.filter(p => p.age < p.life);
+  [S.rings, S.eman].forEach(a => a.forEach(r => r.age += dt));
+  S.rings = S.rings.filter(r => r.age < r.life); S.eman = S.eman.filter(e => e.age < e.life);
+  S.shake *= Math.pow(.88, dt / 16); S.flash = Math.max(0, S.flash - dt * .0025);
+}
+function draw() {
+  ctx.setTransform(R, 0, 0, R, 0, 0);
+  drawBG();
+  ctx.save();
+  if (S.shake > .3) ctx.translate((Math.random() - .5) * S.shake, (Math.random() - .5) * S.shake);
+  const c = S.cam; ctx.translate(W / 2, H / 2); ctx.scale(c.z, c.z); ctx.translate(-c.x, -c.y);
+  drawMoon();
+  drawPaper();
+  drawWheel();
+  S.toks.forEach(drawTok);
+  S.ghosts.forEach(g => drawHero(Object.assign(makeHero(), g.h), g.a * .6, true));
+  drawHero(hero);
+  drawParts();
+  drawSyms();
+  ctx.restore();
+  drawLines();
+  if (S.invert > 0) { ctx.globalCompositeOperation = 'difference'; ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H); ctx.globalCompositeOperation = 'source-over'; }
+  if (S.flash > 0) { ctx.globalAlpha = Math.min(1, S.flash); ctx.fillStyle = S.flashColor; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; }
+  postFX();
+  drawHud();
+  if (S.end > 0) { ctx.globalAlpha = S.end; ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; }
+  if (!started && !RENDER) {
+    ctx.fillStyle = 'rgba(0,0,0,.45)'; ctx.fillRect(0, 0, W, H);
+    ctx.font = `600 46px Fredoka, Arial, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff';
+    ctx.fillText('▶  Oynatmak için tıkla', W / 2, H / 2);
+  }
+  if (paused && started) { ctx.fillStyle = 'rgba(0,0,0,.4)'; ctx.fillRect(0, 0, W, H); ctx.font = `600 56px Fredoka, Arial, sans-serif`; ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.fillText('⏸', W / 2, H / 2); }
+}
+function stepFrame(real) {
+  let dt = real;
+  if (S.hitstop > 0) { S.hitstop -= real; dt = 0; }
+  if (S.invert > 0) S.invert -= real;
+  dt *= S.slow; time += dt; vclock += real; update(dt);
+  S.chroma *= Math.pow(.86, real / 16);
+  const c = S.cam, l = S.lastCam;
+  S.camV = l ? (Math.hypot(c.x - l.x, c.y - l.y) * c.z / W * 30 + Math.abs(Math.log(c.z / l.z)) * 8) * (33.3 / Math.max(real, 1)) : 0;
+  S.lastCam = { x: c.x, y: c.y, z: c.z };
+}
+
+/* ================== Hikâye ================== */
+async function scene9() {
+  Object.assign(S.cam, { x: 0, y: -170, z: 1 });
+  S.bars = 1; tween(S, { bars: 0 }, 1200, E.io);
+  hero.x = -150; hero.y = -1400; hero.dir = 1; hero.p = Object.assign({}, POSE.air);
+  const n9 = await popTok('9', -10, 0, { size: 170 });
+  await wait(300);
+  // Nod gökten düşer
+  sfx.whistle(); hero.ghost = true;
+  await tween(hero, { y: 0 }, 520, E.in); hero.ghost = false;
+  impact(hero.x, 0, { ring: 160, shake: 14, flash: .15, n: 14 }); hitStop(70);
+  await landFx(true);
+  face('dot', 'smile');
+  await wait(300); sym('?', 600); await pose('scratch', 250); await wait(700); await pose('stand', 200);
+  // 9 × 7 = 63
+  await pose('uppercut', 120); sfx.swoosh(); emanata(heroPt('hand').x, heroPt('hand').y, 10, 20, 80);
+  const tX = tok('×', 0, -1500), t7 = tok('7', 0, -1500);
+  let eq = [n9, tX, t7];
+  let xs = row(eq, 0); tween(n9, { x: xs[0] }, 300); tX.x = xs[1]; t7.x = xs[2];
+  hero.dir = 1; tween(hero, { x: xs[0] - 140 }, 300);
+  await dropTok(tX, 0, 380); pose('stand', 200); await dropTok(t7, 0, 340);
+  await wait(250);
+  const tE = tok('=', 0, 0, { alpha: 0 }), t63 = tok('63', 0, 0, { s: 0 });
+  eq = [n9, tX, t7, tE, t63]; xs = row(eq, 0);
+  sfx.swoosh(); tE.x = xs[3] + 200; tween(tE, { alpha: 1 }, 200);
+  camTo(0, -190, .9, 600);
+  [n9, tX, t7, tE].forEach((t, i) => tween(t, { x: xs[i] }, 380));
+  tween(hero, { x: xs[0] - 150 }, 380);
+  await wait(400);
+  t63.x = xs[4]; t63.glow = 1; sfx.ding(); await tween(t63, { s: 1, glow: 0 }, 450, E.back);
+  await wait(400);
+  // 63'ün üstüne zıpla, tepin: 6 ve 3 ayrılır → 6 + 3 → 9
+  await jumpTo(t63.x, tokTop(t63) + 6, 650, 160);
+  await wait(200);
+  await pose('stomp', 120); sfx.boom(); S.shake = 12; emanata(t63.x, tokTop(t63), 12, 30, 110);
+  hitStop(70);
+  const ax = t63.x;
+  untok(t63);
+  const a6 = tok('6', ax - 40, 0), a3 = tok('3', ax + 40, 0), aP = tok('+', ax, 0, { s: 0, color: RED });
+  hero.ghost = true; jumpTo(ax, -240, 300, 40, false);
+  aP.y = -200; await Promise.all([tween(a6, { x: ax - 110, y: -200 }, 320, E.out), tween(a3, { x: ax + 110, y: -200 }, 320, E.out), tween(aP, { s: 1 }, 300, E.back)]);
+  hero.ghost = false;
+  pose('air', 100);
+  await anim(250, k => { hero.y = -240 + 240 * k * k; });
+  hero.y = 0; hero.x = ax; await landFx();
+  hero.dir = -1; face('dot', 'smile');
+  // kenara kaç, 6 ile 3 çarpışsın
+  await jumpTo(ax + 230, 0, 360, 80); hero.dir = -1;
+  await pose('push', 120);
+  sfx.swoosh();
+  await Promise.all([tween(a6, { x: ax, y: 0 }, 260, E.in), tween(a3, { x: ax, y: 0 }, 260, E.in), tween(aP, { s: 0 }, 200)]);
+  untok(a6); untok(a3); untok(aP);
+  const r9 = tok('9', ax, 0, { color: RED, glow: 1 }); squash(r9);
+  impact(ax, -55, { ring: 260, shake: 18, flash: .3, chroma: 10 }); hitStop(110, 60); camPunch(1.15);
+  tween(r9, { glow: 0 }, 1200);
+  face('wide', 'o'); await pose('shock', 120); sym('!', 700);
+  await wait(900);
+  face('dot', 'smile'); await pose('stand', 200);
+
+  // hızlı tur: 9 × 8 = 72 → 9, 9 × 123 = 1107 → 9
+  const left = [n9, tX, t7, tE];
+  [r9, ...left].forEach((t, i) => fallAway(t, i * 60)); sfx.whistle();
+  await runTo(-200, 500);
+  hero.dir = 1;
+  const rounds = [['8', '72', ['7', '2']], ['123', '1107', ['1', '1', '0', '7']], ['4567', '41103', ['4', '1', '1', '0', '3']]];
+  let speed = 1;
+  for (const [m, res, digs] of rounds) {
+    const b9 = tok('9', 0, -1500), bx = tok('×', 0, -1500), bm = tok(m, 0, -1500), be = tok('=', 0, -1500), br = tok(res, 0, -1500);
+    const e2 = [b9, bx, bm, be, br]; const sz = res.length > 4 ? 110 : res.length > 3 ? 120 : 140;
+    e2.forEach(t => t.size = sz);
+    const x2 = row(e2, 60); e2.forEach((t, i) => t.x = x2[i]);
+    camTo(60, -170, Math.min(.85, 640 / (x2[4] - x2[0] + 300)), 400);
+    for (const t of e2) { dropTok(t, 0, 260 * speed); await wait(90 * speed); }
+    await wait(350 * speed);
+    hero.x = x2[0] - 170;
+    // Nod rakamları üst üste yumruklar
+    await runTo(br.x - twOf(br) / 2 - 70, 350 * speed);
+    await pose('punch', 90); sfx.swoosh(); emanata(br.x - twOf(br) / 2, -50, 10, 20, 90); hitStop(60); S.chroma = 6;
+    untok(br);
+    const parts = digs.map(d => tok(d, br.x, 0, { size: sz }));
+    const pxs = row(parts, br.x, .6);
+    await Promise.all(parts.map((t, i) => tween(t, { x: pxs[i], y: -60 + (i % 2) * 40 }, 220 * speed, E.out)));
+    pose('stand', 150);
+    await wait(150 * speed);
+    // birleştir
+    sfx.magic();
+    await Promise.all(parts.map(t => tween(t, { x: br.x, y: 0, s: .4 }, 300 * speed, E.in)));
+    parts.forEach(untok);
+    const nine = tok('9', br.x, 0, { size: sz, color: RED, glow: 1 }); squash(nine); tween(nine, { glow: 0 }, 800);
+    impact(br.x, -50, { ring: 180, shake: 10, flash: .15, n: 16 });
+    face('wide', 'o'); sym('!', 300);
+    await wait(550 * speed);
+    face('dot', 'smile');
+    [b9, bx, bm, be, nine].forEach((t, i) => fallAway(t, i * 40)); sfx.whistle();
+    speed *= .75;
+    hero.x = -200; hero.dir = 1;
+  }
+  hero.x = -190;
+  face('x', 'wavy'); hero.noBlink = true;
+  await pose('flail', 150);
+  await anim(700, k => { hero.rot = Math.sin(k * Math.PI * 6) * .25; });
+  hero.rot = 0; hero.noBlink = false; face('dot', 'smile'); await pose('stand', 200);
+  await wait(200);
+}
+
+async function scene142857() {
+  camTo(0, -260, .78, 700);
+  // 142857 gökten ağır düşer
+  const N = tok('142857', 80, -1700, { size: 150 });
+  sfx.whistle(); await wait(200);
+  face('wide', 'o'); sym('!', 400);
+  await tween(N, { y: 0 }, 500, E.in);
+  impact(80, 0, { ring: 380, shake: 26, flash: .2, chroma: 12, big: true }); hitStop(120); squash(N);
+  hero.ghost = true; await jumpTo(-280, 0, 380, 90); hero.ghost = false; hero.dir = 1;
+  face('dot', 'smile');
+  await wait(500);
+  // çark: rakamlar daireye dizilir
+  const wy = -470;
+  S.wheel = { x: 80, y: wy, r: 230, s: 0, rot: 0, a: 1, hl: false };
+  sfx.magic();
+  const xsN = row([N], 80);
+  // rakamları tek tek ayır ve çemberdeki yerlerine uçur
+  untok(N);
+  const D = '142857', dToks = [];
+  ctx.font = EQF(150); let acc = 80 - ctx.measureText(D).width / 2;
+  for (const ch of D) { const w = ctx.measureText(ch).width; dToks.push(tok(ch, acc + w / 2, 0, { size: 150 })); acc += w; }
+  await wait(150);
+  await Promise.all(dToks.map((t, i) => {
+    const a = i / 6 * Math.PI * 2 - Math.PI / 2, rr = 230 - 36;
+    const tx = 80 + Math.cos(a) * rr, ty = wy + Math.sin(a) * rr + 78 * .36;
+    return wait(i * 70).then(() => { sfx.pop(1 + i * .1); return tween(t, { x: tx, y: ty, size: 78, rot: a + Math.PI / 2 }, 450, E.back); });
+  }));
+  dToks.forEach(untok); dToks.forEach(t => t.w = 700);
+  S.wheel.s = 1;
+  await camTo(80, -470, .9, 500);
+  // Nod çarkın içine atlar
+  await jumpTo(80, wy + 230 - 4, 650, 240);
+  hero.dir = 1; S.wheel.hl = true;
+  await wait(250);
+  // sonuç satırı
+  const rowY = wy + 420;
+  const mulT = tok('× 1', 80, rowY, { size: 80, w: 700 }), eqT = tok('= 142857', 80, rowY + 100, { size: 80, w: 700 });
+  mulT.s = eqT.s = 0; tween(mulT, { s: 1 }, 300, E.back); await tween(eqT, { s: 1 }, 300, E.back);
+  sfx.ding();
+  camTo(80, -330, .78, 500);
+  await wait(500);
+  // ×2 … ×6: Nod koşar, çark döner, tepedeki rakamdan okunan sayı değişir
+  const starts = { 2: 2, 3: 1, 4: 4, 5: 5, 6: 3 }; // tepedeki rakamın indeksi
+  let curIdx = 0, rot = 0;
+  hero.run = 1; hero.dir = 1; hero.noDust = true;
+  for (let m = 2; m <= 6; m++) {
+    const target = starts[m];
+    let steps = ((target - curIdx) % 6 + 6) % 6; if (steps === 0) steps = 6;
+    const dur = Math.max(420, 1000 - (m - 2) * 140);
+    hero.runSpeed = 1 + (m - 2) * .45;
+    sfx.spin(); if (m >= 4) speedLines(dur);
+    tween(hero, { x: 80 + 4 }, dur);
+    await tween(S.wheel, { rot: rot - steps * Math.PI / 3 }, dur, E.io);
+    rot -= steps * Math.PI / 3; curIdx = target;
+    const num = D.slice(target) + D.slice(0, target);
+    mulT.txt = '× ' + m; squash(mulT);
+    setTxt(eqT, '= ' + num);
+    burst(80, wy - 230, 10, { shape: 'star', speed: .3, colors: [RED, '#ffb703'] });
+    await wait(Math.max(200, 520 - (m - 2) * 80));
+  }
+  hero.run = 0; hero.runSpeed = 1; hero.noDust = false;
+  face('happy', 'grin'); await pose('cheer', 200); await wait(500);
+  // × 7 kocaman düşer
+  sfx.whistle(); face('wide', 'o'); await pose('stand', 120); sym('?', 400);
+  const s7 = tok('×7', 80, wy - 1400, { size: 200, color: RED, w: 700 });
+  await tween(s7, { y: wy - 120 }, 480, E.in);
+  impact(80, wy - 200, { ring: 420, shake: 34, flash: .5, chroma: 18, big: true, flashColor: RED }); hitStop(160, 90);
+  untok(s7);
+  speedLines(800);
+  // Nod çarktan fırlar
+  hero.ghost = true; face('x', 'o'); pose('flail', 150);
+  const hx0 = hero.x, hy0 = hero.y;
+  anim(900, k => { hero.x = hx0 - 520 * k; hero.y = hy0 - Math.sin(Math.PI * k) * 380 + 900 * k * k * .5; hero.rot = -k * 9; });
+  sfx.spin();
+  await tween(S.wheel, { rot: rot - Math.PI * 10 }, 1400, E.in);
+  hero.ghost = false;
+  // rakamlar çarktan dökülür ve 999999 olur
+  S.wheel.a = 0;
+  const fly = [];
+  for (let i = 0; i < 6; i++) {
+    const a = i / 6 * Math.PI * 2 - Math.PI / 2, rr = 194;
+    fly.push(tok('142857'[i], 80 + Math.cos(a) * rr, wy + Math.sin(a) * rr + 28, { size: 78, w: 700, rot: a + Math.PI / 2 }));
+  }
+  untok(mulT); untok(eqT);
+  const NI = tok('999999', 80, 0, { size: 150, alpha: 0 });
+  ctx.font = EQF(150); const w9 = ctx.measureText('9').width, st9 = 80 - w9 * 3;
+  await Promise.all(fly.map((t, i) => tween(t, { x: st9 + w9 * (i + .5), y: 0, size: 150, rot: Math.PI * 4 }, 600, E.in)));
+  fly.forEach(t => { t.txt = '9'; t.rot = 0; t.w = 500; });
+  hero.rot = 0; hero.x = -300; hero.y = 0; face('wide', 'o'); hero.p = Object.assign({}, POSE.sit);
+  await camTo(80, -170, .82, 200);
+  fly.forEach(untok); NI.alpha = 1; NI.color = RED;
+  impact(80, -55, { ring: 420, shake: 30, flash: .35, chroma: 16, big: true }); hitStop(180);
+  // donma anı: sinema şeritleri ve yavaş yakınlaşma
+  tween(S, { bars: 1 }, 300);
+  await camTo(-60, -200, 1.0, 1600, E.out);
+  await wait(500);
+  tween(S, { bars: 0 }, 500);
+  sym('!', 500); sym('!', 500);
+  await wait(600);
+  return NI;
+}
+
+async function scenePyramid(NI) {
+  // 999999 parçalanır, dokuz tane 1 sırayla düşer
+  face('dot', 'smile'); await pose('stand', 200);
+  NI.color = INK; await wait(150);
+  sfx.boom(); shatter(NI, 40); S.shake = 18; S.chroma = 8;
+  await camTo(0, -200, .78, 500);
+  const ones = [];
+  for (let i = 0; i < 9; i++) { const t = tok('1', 0, -1600, { size: 120 }); ones.push(t); }
+  const oxs = row(ones, 40, .02); ones.forEach((t, i) => t.x = oxs[i]);
+  hero.x = oxs[0] - 130; hero.dir = 1;
+  for (let i = 0; i < 9; i++) { dropTok(ones[i], 0, 220); sfx.pop(1 + i * .08); await wait(110); }
+  await wait(400);
+  // Nod ² atar
+  await pose('uppercut', 150); sfx.swoosh();
+  const hp = heroPt('hand'), sq = tok('2', hp.x, hp.y + 20, { size: 70, color: RED, w: 700 });
+  const last = ones[8];
+  await anim(500, k => { sq.x = lerp(hp.x, last.x + 40, k); sq.y = lerp(hp.y + 20, -95, k) - Math.sin(Math.PI * k) * 180; sq.rot = k * Math.PI * 2; });
+  sq.rot = 0; sfx.clang(); squash(sq); pose('stand', 200);
+  await wait(400);
+  // eşittir'e tekme → piramit yükselir
+  const eqT = tok('=', last.x + 150, 0, { size: 120, s: 0 }); tween(eqT, { s: 1 }, 300, E.back);
+  await wait(300);
+  sym('?', 500); await wait(500);
+  const rowsTxt = []; for (let n = 9; n >= 1; n--) { let s = ''; for (let i = 1; i <= n; i++) s += i; for (let i = n - 1; i >= 1; i--) s += i; rowsTxt.push(s); }
+  // bütün satırı kaldır, sahne yukarı kurulacak
+  await runTo(-40, 500); hero.dir = 1;
+  await pose('crouch', 100);
+  [...ones, sq, eqT].forEach((t, i) => fallAway(t, i * 25)); sfx.whistle();
+  await pose('stand', 150);
+  const RH = 92, FS = 84;
+  await camTo(0, -260, .7, 500);
+  const pyr = [];
+  for (let i = 0; i < 9; i++) {
+    const y = -i * RH; const t = tok(rowsTxt[i], 0, y, { size: FS, s: 0, w: 500 });
+    pyr.push(t);
+    if (i === 0) { await tween(t, { s: 1 }, 380, E.back); impact(0, -30, { ring: 360, shake: 20, flash: .2, n: 24 }); hitStop(80); hero.x = -40; hero.y = -RH * .82; landFx(); }
+    else {
+      sfx.pop(1 + i * .1); tween(t, { s: 1 }, 260, E.back); burst(0, y - 30, 10, { speed: .3 });
+      await jumpTo(rand(-40, 40), y - RH * .82, 260, 70, false); hero.p = Object.assign({}, POSE.stand);
+      camTo(0, y - 200, .7, 300);
+    }
+    await wait(140);
+  }
+  // en üstteki "1"de zafer pozu
+  sfx.win(); face('happy', 'grin'); await pose('cheer', 200);
+  const topRow = pyr[8];
+  burst(hero.x, hero.y - 150, 20, { shape: 'star', speed: .4, colors: [RED, '#ffb703'] });
+  // geri çekil: bütün piramit görünsün, ortadaki 9 kırmızı
+  pyr[0].sup = null;
+  await camTo(0, -440, .62, 900);
+  const bottom = pyr[0];
+  // alttaki satırın ortasındaki 9'u vurgula: üstüne kırmızı 9 bindir
+  ctx.font = EQF(FS); const fw = ctx.measureText(rowsTxt[0]).width, cw = ctx.measureText('9').width;
+  const mid9 = tok('9', 0, 0, { size: FS, color: RED, glow: 1 }); tween(mid9, { glow: 0 }, 1500); squash(mid9);
+  const cap = tok('111111111²', 0, 170, { size: 70, s: 0, w: 700 }); sfx.ding(); tween(cap, { s: 1 }, 350, E.back);
+  await wait(1700);
+  face('dot', 'smile'); pose('stand', 200);
+  return { pyr, mid9, cap, RH };
+}
+
+async function sceneNines(P) {
+  // piramit çöker, Nod düşer
+  sfx.whistle(); face('wide', 'o'); sym('!', 400);
+  await wait(200);
+  P.pyr.forEach((t, i) => fallAway(t, (8 - i) * 50)); fallAway(P.mid9, 0); fallAway(P.cap, 0);
+  pose('flail', 120); hero.ghost = true;
+  const y0 = hero.y;
+  camTo(0, -200, .9, 900);
+  await anim(900, k => { hero.y = lerp(y0, 0, k * k); hero.rot = k * Math.PI * 2; });
+  hero.rot = 0; hero.ghost = false; hero.x = -260; hero.y = 0;
+  impact(hero.x, 0, { ring: 200, shake: 16, flash: .1, n: 12 });
+  face('x', 'wavy'); hero.p = Object.assign({}, POSE.sit); hero.noBlink = true;
+  await wait(700);
+  hero.noBlink = false; face('dot', 'smile'); await pose('stand', 250);
+  // 0,9 belirir
+  const z = await popTok('0,9', 0, 0, { size: 130 });
+  await wait(500);
+  sym('?', 500); await wait(600);
+  // Nod koşar, 9'lar önünde sonsuza uzar
+  const digits = [z];
+  let lastX = z.x + twOf(z) / 2;
+  ctx.font = EQF(130); const w9 = ctx.measureText('9').width;
+  hero.dir = 1; hero.run = 1;
+  let hx = hero.x, total = 0;
+  sfx.rise();
+  const runDur = 6400;
+  speedLines(runDur, null);
+  hero.ghost = true;
+  await anim(runDur, k => {
+    const speed = 1 + 4 * k;
+    hero.runSpeed = speed * .7;
+    hx += speed * 9; hero.x = hx;
+    while (lastX < hero.x + 900) { const t = tok('9', lastX + w9 / 2, 0, { size: 130, trail: false }); digits.push(t); lastX += w9; if (Math.random() < .25) sfx.tick(); }
+    S.cam.x = hero.x + 120; S.cam.y = -170; S.cam.z = .9 - k * .3;
+  });
+  hero.ghost = false;
+  // uzakta bir "= 1" var ama ulaşılamıyor → Nod yorulur
+  hero.run = 0; hero.runSpeed = 1;
+  face('dot', 'wavy'); hero.sweat = 1;
+  await pose('tired', 300);
+  await wait(900);
+  // kamera hızla geri çekilir: dokuzlar uzaktan bir çizgi gibi görünür, sonra 1'e çöker
+  const x0 = z.x - 200, x1 = lastX;
+  await camTo((x0 + x1) / 2, -170, W / (x1 - x0 + 200), 900, E.io);
+  await wait(300);
+  sfx.magic();
+  const cx = (x0 + x1) / 2;
+  const ONE = tok('1', cx, 0, { size: 130 * 7, s: 0, color: RED });
+  await Promise.all(digits.map((t, i) => tween(t, { x: cx, s: .2 }, 700, E.in)));
+  digits.forEach(untok);
+  hero.x = cx - 520; hero.sweat = 0;
+  ONE.s = 1; ONE.glow = 1;
+  impact(cx, -320, { ring: 900, shake: 40, flash: .6, chroma: 20, big: true }); hitStop(170, 90);
+  await camTo(cx - 120, -330, .62, 500, E.out);
+  tween(ONE, { glow: 0 }, 1500);
+  face('wide', 'o'); pose('shock', 150); sym('!', 700); sym('?', 700);
+  const lab = tok('0,999… = 1', cx, 180, { size: 90, s: 0, w: 700 }); tween(lab, { s: 1 }, 350, E.back);
+  await wait(1700);
+  face('dot', 'smile'); await pose('stand', 200);
+  return { ONE, lab, cx };
+}
+
+async function scenePaper(O) {
+  const cx = O.cx;
+  fallAway(O.ONE, 0); fallAway(O.lab, 100); sfx.whistle();
+  hero.x = cx; hero.y = 0; hero.dir = 1;
+  await camTo(cx, -200, .9, 700);
+  // kâğıt kayarak gelir
+  S.paper = { x: cx + 900, y: 0, w: 300, h: 6, layers: 1, a: 1, flip: 0, fh: 6 };
+  hero.x = cx - 250;
+  sfx.paper();
+  await tween(S.paper, { x: cx }, 500, E.out);
+  S.hud = { exp: '0', label: '0,1 mm', a: 0, s: 1, y: 230 }; tween(S.hud, { a: 1 }, 300);
+  await jumpTo(cx, -6, 450, 110);
+  await wait(300);
+  // katlama
+  const fmt = v => v.toLocaleString('tr-TR', { maximumFractionDigits: v < 10 ? 1 : 0 });
+  const unit = mmv => mmv < 10 ? fmt(mmv) + ' mm' : mmv < 1000 ? fmt(mmv / 10) + ' cm' : mmv < 1e6 ? fmt(mmv / 1000) + ' m' : fmt(mmv / 1e6) + ' km';
+  let n = 0;
+  const p = S.paper;
+  // görsel yükseklik: önce gerçek gibi, sonra Nod'un tırmanacağı bir kule
+  const visH = n => n <= 6 ? 6 * Math.pow(2, n) * .5 + 3 : 200 + (n - 6) * 220;
+  for (n = 1; n <= 42; n++) {
+    const fast = n > 6, dur = fast ? Math.max(70, 260 - n * 6) : 420;
+    if (!fast) {
+      await pose('fold', 120);
+      sfx.paper(); p.fh = p.h;
+      await tween(p, { flip: 1 }, dur, E.io); p.flip = 0;
+      pose('stand', 120);
+    } else if (n % 2 === 0) sfx.paper();
+    const nh = visH(n);
+    p.layers = Math.pow(2, n);
+    if (n === 7) { S.noBlur = true; hero.run = 0; face('happy', 'grin'); pose('cheer', 200); sfx.rise(); speedLines(10000, 'v'); }
+    // yükseklik artar, Nod üstünde yükselir
+    const ph = p.h;
+    await anim(fast ? dur : 160, k => { p.h = lerp(ph, nh, k); hero.y = -p.h; S.cam.y = Math.min(-200, -p.h - 120); }, E.out);
+    S.hud.exp = String(n); S.hud.label = unit(.1 * Math.pow(2, n)); if (!fast) { S.hud.s = 1.2; tween(S.hud, { s: 1 }, 300, E.back); }
+    // gökyüzü: 14. katta mavi, 30'dan sonra uzay
+    S.sky = n < 10 ? 0 : n < 30 ? Math.min(1, (n - 10) / 8) : Math.min(2.6, 1 + (n - 30) / 6);
+    if (n === 18) burst(cx + 200, hero.y - 100, 0);
+    if (n === 36) { S.moon = { x: cx + 40, y: -visH(42) - 520, r: 260 }; }
+    if (!fast) await wait(200);
+  }
+  // Ay'a çarp
+  const moonY = S.moon.y + S.moon.r;
+  hero.ghost = true;
+  const hy = hero.y;
+  S.noBlur = false;
+  pose('uppercut', 120);
+  await anim(350, k => { hero.y = lerp(hy, moonY + 175, k); S.cam.y = hero.y - 160; }, E.in);
+  hero.ghost = false;
+  impact(hero.x, moonY, { ring: 500, shake: 45, flash: .8, chroma: 24, big: true, colors: ['#fff', '#ffe066', RED] }); hitStop(220, 110);
+  face('x', 'o');
+  S.moon.rot = 0; tween(S.moon, { rot: .15 }, 400, E.elastic);
+  await wait(300);
+  // ayın altında sayılar
+  S.hud.exp = '42'; S.hud.label = '≈ 439.805 km'; S.hud.y = H - 260; S.hud.s = 1.4; tween(S.hud, { s: 1 }, 400, E.back); sfx.ding();
+  await wait(1400);
+  return { cx, moonY };
+}
+
+async function sceneEnd(P) {
+  // Nod Ay'dan geri düşer
+  sfx.whistle(); hero.ghost = true; pose('flail', 150);
+  face('wide', 'o');
+  tween(S.hud, { a: 0 }, 300);
+  speedLines(2200, 'v');
+  const y0 = hero.y, cx = P.cx;
+  await anim(2200, k => {
+    hero.y = lerp(y0, -1100, E.in(k)); hero.rot = k * Math.PI * 6;
+    S.cam.y = hero.y + 40; S.cam.x = cx; S.sky = Math.max(0, 2.6 * (1 - k * 1.15));
+    if (S.paper) S.paper.a = 1 - k;
+  });
+  S.paper = null; S.moon = null; S.sky = 0;
+  // aşağıda bekleyen "1"
+  const ONE = tok('1', cx, 0, { size: 200, color: INK });
+  camTo(cx, -220, .9, 300);
+  await anim(320, k => { hero.y = lerp(-1100, tokTop(ONE) + 6, k * k); hero.rot = Math.PI * 6 + k * Math.PI * 2; });
+  hero.rot = 0; hero.ghost = false; hero.y = tokTop(ONE) + 6;
+  impact(cx, tokTop(ONE), { ring: 420, shake: 36, flash: .35, chroma: 16, big: true }); hitStop(160); squash(ONE);
+  face('x', 'wavy'); hero.p = Object.assign({}, POSE.crouch); hero.noBlink = true;
+  await wait(800);
+  hero.noBlink = false;
+  face('dot', 'smile'); await pose('stand', 300);
+  await camTo(cx, -330, 1.25, 900);
+  await wait(300);
+  hero.dir = 1; face('wink', 'grin'); hero.noBlink = true;
+  await pose('proud', 250);
+  ONE.glow = 1; tween(ONE, { glow: 0 }, 1500); sfx.win();
+  for (let i = 0; i < 4; i++) wait(i * 330).then(() => firework(cx + rand(-260, 260), rand(-700, -480)));
+  await wait(1300);
+  await pose('wave', 200);
+  for (let i = 0; i < 3; i++) { await tween(hero.p, { aFe: 1.3 }, 180); await tween(hero.p, { aFe: .3 }, 180); }
+  await wait(500);
+  await tween(S, { end: 1 }, 700);
+  await wait(300);
+}
+
+async function story() {
+  await scene9();
+  const NI = await scene142857();
+  const P = await scenePyramid(NI);
+  const O = await sceneNines(P);
+  const Q = await scenePaper(O);
+  await sceneEnd(Q);
+}
+
+/* ================== Oynatma & video çıktısı ================== */
+let runToken = 0;
+async function start() {
+  initAudio(); runToken++; const my = runToken;
+  resetScene(); time = 0; started = true; running = true; paused = false;
+  await story(); if (my === runToken) running = false;
+}
+function togglePause() { if (!started) return; paused = !paused; if (AC) paused ? AC.suspend() : AC.resume(); document.getElementById('btnPause').textContent = paused ? '▶ Devam' : '⏸ Duraklat'; }
+document.getElementById('btnPlay').onclick = () => { document.getElementById('btnPlay').textContent = '↺ Baştan'; start(); };
+document.getElementById('btnPause').onclick = togglePause;
+document.getElementById('btnMusic').onclick = e => { musicOn = !musicOn; e.target.textContent = musicOn ? '🎵 Müzik: Açık' : '🎵 Müzik: Kapalı'; };
+cv.addEventListener('click', () => { if (!started) { document.getElementById('btnPlay').textContent = '↺ Baştan'; start(); } else togglePause(); });
+addEventListener('keydown', e => { if (e.code === 'Space') { e.preventDefault(); togglePause(); } });
+
+window.R_init = async () => { await Promise.all([document.fonts.load(EQF(80)), document.fonts.load(EQF(80, 700))]).catch(() => { }); return true; };
+window.R_start = () => { started = true; running = true; resetScene(); story().then(() => { window.R_done = true; }); };
+window.R_seek = async ms => { while (vclock < ms && !window.R_done) { stepFrame(1000 / 30); await new Promise(r => setTimeout(r)); } draw(); return cv.toDataURL('image/jpeg', .85); };
+window.R_step = () => { stepFrame(1000 / 30); draw(); return cv.toDataURL('image/jpeg', .92); };
+window.R_audio = async () => {
+  const sr = 44100, dur = vclock / 1000 + .5;
+  const oc = new OfflineAudioContext(2, Math.ceil(dur * sr), sr); OFF = true; setupAudio(oc);
+  for (const e of events) { T0 = e.t; SFX[e.k](...e.a); }
+  if (musicOn) { T0 = 0; const spb = 60 / BPM / 2; for (let st = 0, t = .05; t < dur - 1.2; st++, t += spb) musicStep(st, t); }
+  const buf = await oc.startRendering();
+  const n = buf.length, dv = new DataView(new ArrayBuffer(44 + n * 4));
+  const ws = (o, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
+  ws(0, 'RIFF'); dv.setUint32(4, 36 + n * 4, true); ws(8, 'WAVE'); ws(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 2, true);
+  dv.setUint32(24, sr, true); dv.setUint32(28, sr * 4, true); dv.setUint16(32, 4, true); dv.setUint16(34, 16, true); ws(36, 'data'); dv.setUint32(40, n * 4, true);
+  const Lc = buf.getChannelData(0), Rc = buf.getChannelData(1); let o = 44;
+  for (let i = 0; i < n; i++) { dv.setInt16(o, clamp(Lc[i], -1, 1) * 32767, true); dv.setInt16(o + 2, clamp(Rc[i], -1, 1) * 32767, true); o += 4; }
+  const u8 = new Uint8Array(dv.buffer); let bin = '';
+  for (let i = 0; i < u8.length; i += 0x8000) bin += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+  return btoa(bin);
+};
+
+fxInit(); resetScene();
+if (!RENDER) {
+  Object.assign(S.cam, { x: 0, y: -170, z: 1 });
+  let lastT = performance.now();
+  const loop = t => { const real = Math.min(50, t - lastT); lastT = t; if (started && !paused) stepFrame(real); draw(); requestAnimationFrame(loop); };
+  requestAnimationFrame(t => { lastT = t; loop(t); });
+}
+</script>
+</body>
+</html>
