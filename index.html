@@ -1,0 +1,1127 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Matematik Ninjası</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap">
+<style>
+/* Layout: gece dojosu sahnesi (canvas) üstte, altında kumanda paneli. Tek, koyu görünüm bilinçli seçim. */
+:root{
+  --bg:#0d0a22;
+  --panel:#1a1442;
+  --line:#352c72;
+  --fg:#f3f0ff;
+  --muted:#a69fd6;
+  --accent:#ffcf3f;
+  --danger:#ff5d73;
+  --ok:#3ddc97;
+  --font-display:"Fredoka","Arial Rounded MT Bold","Trebuchet MS",Arial,sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{min-height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font-display);
+  padding-inline:16px;padding-block:16px 32px}
+.app{max-width:1280px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+header{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:6px 16px}
+h1{margin:0;font-size:clamp(1.3rem,3vw,1.9rem);font-weight:700;letter-spacing:.02em;text-wrap:balance}
+h1 span{color:var(--accent)}
+header p{margin:0;color:var(--muted);font-size:.95rem}
+.stage-wrap{width:min(100%,calc(78vh*16/9));margin:0 auto;max-width:100%}
+.stage-wrap.vertical{width:min(100%,calc(78vh*9/16))}
+canvas{display:block;width:100%;height:auto;border-radius:18px;border:2px solid var(--line);
+  background:var(--panel);cursor:pointer;max-width:100%}
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:center;
+  background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:12px}
+.group{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+button,select,input{font-family:var(--font-display);font-size:1rem;color:var(--fg);
+  background:var(--bg);border:2px solid var(--line);border-radius:12px;padding:8px 14px}
+button{cursor:pointer;font-weight:600}
+button:hover{border-color:var(--accent)}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+button.primary{background:var(--accent);color:var(--bg);border-color:var(--accent)}
+button.rec.on{background:var(--danger);border-color:var(--danger);color:var(--fg)}
+input{width:11ch;text-align:center}
+.sep{width:1px;align-self:stretch;background:var(--line)}
+#msg{min-height:1.3em;text-align:center;color:var(--danger);font-size:.95rem;margin:0}
+#msg.ok{color:var(--ok)}
+.hint{color:var(--muted);font-size:.85rem;text-align:center;margin:0}
+@media (max-width:640px){.sep{display:none}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Matematik <span>Ninjası</span></h1>
+    <p>Toplama mıknatısla, çıkarma çekiçle, çarpma sihirle, bölme kılıçla.</p>
+  </header>
+
+  <div class="stage-wrap" id="wrap"><canvas id="stage" aria-label="Matematik Ninjası animasyonu"></canvas></div>
+
+  <div class="controls">
+    <div class="group">
+      <button id="btnStart" class="primary">▶ Başlat</button>
+      <button id="btnPause">⏸ Duraklat</button>
+      <label for="speed" class="hint">Hız</label>
+      <select id="speed">
+        <option value="0.75">0.75×</option>
+        <option value="1" selected>1×</option>
+        <option value="1.25">1.25×</option>
+        <option value="1.5">1.5×</option>
+      </select>
+    </div>
+    <div class="sep"></div>
+    <div class="group">
+      <button id="btnOrient">📱 Dikey (9:16)</button>
+      <button id="btnMusic">🎵 Müzik: Açık</button>
+      <button id="btnRec" class="rec">⏺ Video Kaydet</button>
+    </div>
+    <div class="sep"></div>
+    <form class="group" id="customForm">
+      <label for="custom" class="hint">Kendi sorun:</label>
+      <input id="custom" placeholder="örn. 24 ÷ 4" autocomplete="off">
+      <button type="submit">Çöz!</button>
+    </form>
+  </div>
+  <p id="msg" role="status"></p>
+  <p class="hint">Boşluk tuşu: duraklat/devam. Video kaydı tüm gösteriyi baştan oynatır ve bitince .webm dosyası indirir.</p>
+</div>
+
+<script>
+"use strict";
+/* ================== Temel ayarlar ================== */
+const R = 1.5;                       // çizim çözünürlüğü çarpanı (video için net görüntü)
+const cv = document.getElementById('stage');
+const ctx = cv.getContext('2d');
+let W = 1280, H = 720, U = 1, G = 600, CX = 640, D = 240, HOME = 140, vertical = false;
+let time = 0, speed = 1, paused = false, started = false, running = false, runToken = 0;
+const F = (sz, w = 700) => `${w} ${Math.round(sz)}px Fredoka, "Arial Rounded MT Bold", Arial, sans-serif`;
+const PAL = ['#ff5d73', '#ffa62b', '#2ec4b6', '#4cc9f0', '#9b5de5', '#f15bb5', '#00bb7f', '#ff8c42'];
+const rand = (a, b) => a + Math.random() * (b - a);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+/* ---------- renk yardımcıları ---------- */
+const _rgb = {};
+function hexRgb(h) { if (_rgb[h]) return _rgb[h]; const n = parseInt(h.slice(1), 16); return _rgb[h] = [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+function mix(h, c, t) { const a = hexRgb(h); return `rgb(${a.map((v, i) => Math.round(v + (c[i] - v) * t)).join(',')})`; }
+const lighten = (h, t) => mix(h, [255, 255, 255], t), darken = (h, t) => mix(h, [0, 0, 0], t);
+const colorFor = v => PAL[Math.abs(Math.round(v)) % PAL.length];
+
+/* ---------- easing ---------- */
+const E = {
+  lin: t => t,
+  io: t => t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2,
+  out: t => 1 - Math.pow(1 - t, 3),
+  in: t => t * t * t,
+  back: t => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); },
+  elastic: t => t === 0 ? 0 : t === 1 ? 1 : Math.pow(2, -10 * t) * Math.sin((t * 10 - .75) * (2 * Math.PI) / 3) + 1,
+};
+
+/* ---------- zaman çizelgesi: tüm hareketler bu iş kuyruğundan geçer ---------- */
+const jobs = [];
+function anim(dur, fn, ease = E.lin) { return new Promise(res => jobs.push({ t: 0, dur: Math.max(1, dur), fn, ease, res })); }
+function tween(o, to, dur, ease = E.io) { const from = {}; for (const k in to) from[k] = o[k]; return anim(dur, t => { for (const k in to) o[k] = from[k] + (to[k] - from[k]) * t; }, ease); }
+const wait = ms => anim(ms, () => { });
+function runJobs(dt) {
+  for (let i = 0; i < jobs.length; i++) {
+    const j = jobs[i]; j.t += dt; const p = Math.min(1, j.t / j.dur); j.fn(j.ease(p));
+    if (p >= 1) { jobs.splice(i, 1); i--; j.res(); }
+  }
+}
+
+/* ================== Ses ================== */
+let AC = null, master = null, recDest = null, musicGain = null, noiseBuf = null, musicOn = true;
+function initAudio() {
+  if (AC) { if (AC.state === 'suspended') AC.resume(); return; }
+  try {
+    AC = new (window.AudioContext || window.webkitAudioContext)();
+    master = AC.createGain(); master.gain.value = .55; master.connect(AC.destination);
+    recDest = AC.createMediaStreamDestination(); master.connect(recDest);
+    musicGain = AC.createGain(); musicGain.gain.value = .16; musicGain.connect(master);
+    noiseBuf = AC.createBuffer(1, AC.sampleRate, AC.sampleRate);
+    const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  } catch (e) { AC = null; }
+}
+function tone(f, d, { type = 'sine', vol = .3, to = null, delay = 0, dest = null } = {}) {
+  if (!AC) return; const t0 = AC.currentTime + Math.max(0, delay);
+  const o = AC.createOscillator(), g = AC.createGain(); o.type = type;
+  o.frequency.setValueAtTime(f, t0); if (to) o.frequency.exponentialRampToValueAtTime(to, t0 + d);
+  g.gain.setValueAtTime(.0001, t0); g.gain.exponentialRampToValueAtTime(vol, t0 + .01); g.gain.exponentialRampToValueAtTime(.0001, t0 + d);
+  o.connect(g); g.connect(dest || master); o.start(t0); o.stop(t0 + d + .05);
+}
+function noise(d, { vol = .3, f = 1000, to = null, q = 1, type = 'bandpass', delay = 0, dest = null } = {}) {
+  if (!AC) return; const t0 = AC.currentTime + Math.max(0, delay);
+  const s = AC.createBufferSource(); s.buffer = noiseBuf;
+  const fl = AC.createBiquadFilter(); fl.type = type; fl.Q.value = q; fl.frequency.setValueAtTime(f, t0);
+  if (to) fl.frequency.exponentialRampToValueAtTime(to, t0 + d);
+  const g = AC.createGain(); g.gain.setValueAtTime(.0001, t0); g.gain.exponentialRampToValueAtTime(vol, t0 + .01); g.gain.exponentialRampToValueAtTime(.0001, t0 + d);
+  s.connect(fl); fl.connect(g); g.connect(dest || master); s.start(t0); s.stop(t0 + d + .05);
+}
+const semi = (b, s) => b * Math.pow(2, s / 12);
+const sfx = {
+  pop: (p = 1) => tone(420 * p, .14, { to: 900 * p, vol: .25 }),
+  tick: () => tone(1100, .06, { type: 'square', vol: .07 }),
+  go: () => { tone(660, .12, { type: 'triangle', vol: .2 }); tone(990, .3, { type: 'triangle', vol: .2, delay: .1 }); },
+  swoosh: () => noise(.22, { vol: .55, f: 500, to: 5000, q: .8 }),
+  boom: () => { tone(150, .6, { vol: .7, to: 40 }); noise(.45, { vol: .35, f: 500, to: 80, type: 'lowpass' }); },
+  clang: () => { tone(1760, .6, { type: 'triangle', vol: .12, to: 1700 }); tone(2637, .4, { vol: .07 }); },
+  zap: () => { tone(1300, .25, { type: 'sawtooth', vol: .07, to: 200 }); noise(.2, { vol: .2, f: 3000 }); },
+  magic: () => [0, 4, 7, 12, 16].forEach((s, i) => tone(semi(523, s), .25, { type: 'triangle', vol: .12, delay: i * .06 })),
+  whistle: () => tone(1400, .9, { vol: .1, to: 300 }),
+  shrink: () => tone(600, .7, { type: 'square', vol: .045, to: 180 }),
+  hum: () => tone(90, 1.1, { type: 'sawtooth', vol: .05, to: 150 }),
+  win: () => [0, 4, 7, 12].forEach((s, i) => tone(semi(523, s), .4, { type: 'triangle', vol: .16, delay: i * .08 })),
+  land: () => noise(.12, { vol: .3, f: 220, type: 'lowpass' }),
+  boss: () => { tone(110, 1.2, { type: 'sawtooth', vol: .12, to: 55 }); tone(116, 1.2, { type: 'sawtooth', vol: .1, to: 58 }); },
+};
+/* basit arka plan müziği (A minör pentatonik) */
+let nextNoteT = 0, step = 0;
+const BPM = 112, ROOTS = [57, 53, 55, 52];
+const mhz = m => 440 * Math.pow(2, (m - 69) / 12);
+function musicTick() {
+  if (!AC || !musicOn || paused || !running) { if (AC) nextNoteT = AC.currentTime + .05; return; }
+  const spb = 60 / BPM / 2;
+  if (nextNoteT < AC.currentTime) nextNoteT = AC.currentTime + .05;
+  while (nextNoteT < AC.currentTime + .2) {
+    const delay = nextNoteT - AC.currentTime, i = step % 8, r = ROOTS[Math.floor(step / 8) % 4];
+    if (i % 4 === 0) tone(110, .18, { vol: .5, to: 40, delay, dest: musicGain });
+    if (i % 2 === 1) noise(.04, { vol: .12, f: 8000, type: 'highpass', delay, dest: musicGain });
+    if (i === 0 || i === 3 || i === 6) tone(mhz(r - 12), .22, { type: 'triangle', vol: .35, delay, dest: musicGain });
+    if (i % 2 === 0) tone(mhz(r + [0, 3, 7, 10][(step / 2) % 4 | 0] + 12), .16, { type: 'square', vol: .05, delay, dest: musicGain });
+    nextNoteT += spb; step++;
+  }
+}
+setInterval(musicTick, 50);
+
+/* ================== Yerleşim & arka plan ================== */
+let bg = null, bgStars = [], floaters = [];
+function layout() {
+  W = vertical ? 720 : 1280; H = vertical ? 1280 : 720;
+  cv.width = W * R; cv.height = H * R;
+  U = 1;
+  G = vertical ? H * .7 : H * .83;
+  CX = vertical ? W * .5 : W * .55;
+  D = vertical ? 200 : 240;
+  HOME = vertical ? 70 : W * .1;
+  document.getElementById('wrap').classList.toggle('vertical', vertical);
+  buildBg();
+}
+function buildBg() {
+  bg = document.createElement('canvas'); bg.width = W * R; bg.height = H * R;
+  const b = bg.getContext('2d'); b.scale(R, R);
+  const sky = b.createLinearGradient(0, 0, 0, G);
+  sky.addColorStop(0, '#0d0a2a'); sky.addColorStop(.55, '#2a1b5e'); sky.addColorStop(1, '#7a3b7a');
+  b.fillStyle = sky; b.fillRect(0, 0, W, G + 2);
+  // ay
+  const mx = W * .82, my = H * (vertical ? .3 : .22), mr = 70 * U;
+  const halo = b.createRadialGradient(mx, my, mr * .5, mx, my, mr * 3);
+  halo.addColorStop(0, 'rgba(255,220,170,.35)'); halo.addColorStop(1, 'rgba(255,220,170,0)');
+  b.fillStyle = halo; b.fillRect(0, 0, W, H);
+  b.fillStyle = '#ffe9c4'; b.beginPath(); b.arc(mx, my, mr, 0, 7); b.fill();
+  b.fillStyle = 'rgba(220,190,150,.5)';
+  [[-20, -15, 14], [22, 10, 10], [-5, 28, 8]].forEach(([x, y, r]) => { b.beginPath(); b.arc(mx + x * U, my + y * U, r * U, 0, 7); b.fill(); });
+  // dağ katmanları
+  const layers = [['#3a2470', .55, 140], ['#2b1a58', .68, 100], ['#1e1245', .8, 70]];
+  layers.forEach(([c, hRatio, amp], li) => {
+    b.fillStyle = c; b.beginPath(); b.moveTo(0, G);
+    for (let x = 0; x <= W + 40; x += 40) {
+      const y = G - (G * (1 - hRatio)) * .9 - Math.sin(x * .006 + li * 2) * amp * .6 * U - Math.sin(x * .017 + li) * amp * .25 * U;
+      b.lineTo(x, Math.min(G, y + li * 30));
+    }
+    b.lineTo(W, G); b.closePath(); b.fill();
+  });
+  // pagoda silueti
+  b.fillStyle = '#150d33';
+  const px = W * .16, py = G;
+  for (let i = 0; i < 3; i++) {
+    const w = (120 - i * 30) * U, y = py - (60 + i * 55) * U;
+    b.fillRect(px - w * .3, y, w * .6, 55 * U);
+    b.beginPath(); b.moveTo(px - w * .7, y + 8 * U); b.quadraticCurveTo(px, y - 30 * U, px + w * .7, y + 8 * U); b.lineTo(px, y - 12 * U); b.closePath(); b.fill();
+  }
+  // zemin
+  const gr = b.createLinearGradient(0, G, 0, H);
+  gr.addColorStop(0, '#3b2a6e'); gr.addColorStop(1, '#140d30');
+  b.fillStyle = gr; b.fillRect(0, G, W, H - G);
+  b.strokeStyle = 'rgba(255,207,63,.55)'; b.lineWidth = 3; b.beginPath(); b.moveTo(0, G); b.lineTo(W, G); b.stroke();
+  b.strokeStyle = 'rgba(255,255,255,.06)'; b.lineWidth = 2;
+  for (let x = -W; x < W * 2; x += 90) { b.beginPath(); b.moveTo(W / 2 + (x - W / 2) * .35, G); b.lineTo(x, H); b.stroke(); }
+  for (let i = 1; i < 4; i++) { const y = G + (H - G) * (i * i) / 16; b.beginPath(); b.moveTo(0, y); b.lineTo(W, y); b.stroke(); }
+  bgStars = []; for (let i = 0; i < 90; i++) bgStars.push({ x: rand(0, W), y: rand(0, G * .75), r: rand(.6, 2.2), ph: rand(0, 7) });
+  floaters = []; const syms = ['+', '−', '×', '÷', '='];
+  for (let i = 0; i < 14; i++) floaters.push({ x: rand(0, W), y: rand(0, H), s: syms[i % 5], size: rand(26, 60), v: rand(.006, .02), rot: rand(-.4, .4) });
+}
+
+/* ================== Sahne ================== */
+let S, hero;
+function makeHero() { return { x: -120, hop: 0, dir: 1, armA: .5, tool: null, walk: 0, phase: 0, s: 1, rot: 0, sqx: 1, sqy: 1, lastX: -120, bubble: null, ghosts: [], dash: false, glint: 0, brow: 0, happy: 0 }; }
+function resetScene() {
+  jobs.length = 0;
+  S = { blobs: [], pieces: [], texts: [], parts: [], slashes: [], bolts: [], rings: [], mstars: [], field: null, shake: 0, flash: 0, flashColor: '#fff', hud: null, count: null, title: null, cards: [], end: null, hint: false };
+  hero = makeHero();
+}
+
+/* ---------- sayı karakterleri ---------- */
+const baseR = v => (30 + Math.sqrt(Math.max(1, v)) * 11) * U;
+class NumBlob {
+  constructor(v, x) {
+    this.v = v; this.disp = v; this.x = x; this.y = G; this.hop = 0; this.s = 0; this.sx = 1; this.sy = 1; this.rot = 0; this.alpha = 1;
+    this.mood = 'happy'; this.color = colorFor(v); this.look = 0; this.lookFixed = false; this.blink = rand(1000, 4000); this.seed = rand(0, 10);
+    this.ground = true; this.tag = null; this.glow = 0;
+  }
+  get r() { return baseR(this.disp); }
+  update(dt) {
+    if (this.ground) this.y = G - this.r * this.s * this.sy - this.hop;
+    this.blink -= dt; if (this.blink < -140) this.blink = rand(1500, 5000);
+    this.glow = Math.max(0, this.glow - dt * .0015);
+    if (!this.lookFixed) this.look += (clamp((hero.x - this.x) / 300, -1, 1) - this.look) * .08;
+  }
+  draw() {
+    if (this.s <= .001 || this.alpha <= 0) return;
+    ctx.save();
+    const tx = this.x + (this.mood === 'scared' ? Math.sin(time * .09 + this.seed) * 2.2 * U : 0);
+    ctx.translate(tx, this.y); ctx.rotate(this.rot); ctx.scale(this.s * this.sx, this.s * this.sy); ctx.globalAlpha *= this.alpha;
+    this.body(); ctx.restore();
+    if (this.tag) {
+      const ty = this.y - this.r * this.s - 24 * U;
+      ctx.save(); ctx.font = F(24 * U); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#ffcf3f'; ctx.beginPath(); ctx.arc(this.x, ty, 18 * U, 0, 7); ctx.fill();
+      ctx.fillStyle = '#1b1446'; ctx.fillText(this.tag, this.x, ty + 1); ctx.restore();
+    }
+  }
+  body() {
+    const r = this.r, T = time, c = this.color;
+    ctx.beginPath();
+    for (let i = 0; i <= 48; i++) {
+      const a = i / 48 * Math.PI * 2;
+      const rr = r * (1 + .025 * Math.sin(3 * a + T * .004 + this.seed) + .018 * Math.sin(5 * a - T * .003 + this.seed * 2));
+      i ? ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr) : ctx.moveTo(Math.cos(a) * rr, Math.sin(a) * rr);
+    }
+    ctx.closePath();
+    if (this.glow > 0) { ctx.shadowColor = '#fff6a8'; ctx.shadowBlur = 60 * this.glow; }
+    const g = ctx.createRadialGradient(-r * .35, -r * .4, r * .1, 0, 0, r * 1.05);
+    g.addColorStop(0, lighten(c, .45)); g.addColorStop(.55, c); g.addColorStop(1, darken(c, .35));
+    ctx.fillStyle = g; ctx.fill(); ctx.shadowBlur = 0;
+    ctx.lineWidth = Math.max(3, r * .06); ctx.strokeStyle = darken(c, .5); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.beginPath(); ctx.ellipse(-r * .42, -r * .5, r * .18, r * .1, -.6, 0, 7); ctx.fill();
+    // sayı
+    const txt = String(Math.round(this.disp));
+    const fs = r * (txt.length > 2 ? .62 : txt.length > 1 ? .8 : .95);
+    ctx.font = F(fs); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+    ctx.lineWidth = fs * .14; ctx.strokeStyle = darken(c, .55); ctx.strokeText(txt, 0, r * .22);
+    ctx.fillStyle = '#fff'; ctx.fillText(txt, 0, r * .22);
+    // gözler
+    const ey = -r * .46, ex = r * .27, er = Math.max(6, r * .15), dk = darken(c, .7);
+    if (this.mood === 'joy') {
+      ctx.strokeStyle = dk; ctx.lineWidth = er * .45; ctx.lineCap = 'round';
+      for (const s of [-1, 1]) { ctx.beginPath(); ctx.arc(s * ex, ey + er * .35, er * .7, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke(); }
+      ctx.fillStyle = 'rgba(255,120,150,.45)';
+      for (const s of [-1, 1]) { ctx.beginPath(); ctx.ellipse(s * ex * 1.55, ey + er * 1.2, er * .55, er * .3, 0, 0, 7); ctx.fill(); }
+    } else if (this.blink < 0) {
+      ctx.strokeStyle = dk; ctx.lineWidth = er * .35; ctx.lineCap = 'round';
+      for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(s * ex - er * .7, ey); ctx.lineTo(s * ex + er * .7, ey); ctx.stroke(); }
+    } else {
+      const sc = this.mood === 'scared';
+      for (const s of [-1, 1]) {
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.ellipse(s * ex, ey, er, er * (sc ? 1.2 : 1), 0, 0, 7); ctx.fill();
+        ctx.strokeStyle = dk; ctx.lineWidth = 2; ctx.stroke();
+        ctx.fillStyle = '#1b1446'; ctx.beginPath();
+        ctx.arc(s * ex + this.look * er * .4, ey + (sc ? 0 : er * .1), er * (sc ? .32 : .5), 0, 7); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(s * ex + this.look * er * .4 - er * .15, ey - er * .15, er * .14, 0, 7); ctx.fill();
+      }
+      if (sc) {
+        ctx.strokeStyle = dk; ctx.lineWidth = er * .3; ctx.lineCap = 'round';
+        for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(s * ex - er * .8 * s, ey - er * 1.7); ctx.lineTo(s * ex + er * .8 * s, ey - er * 1.35); ctx.stroke(); }
+        const sy = -r * .55 + ((T * .05) % 20);
+        ctx.fillStyle = '#9ee7ff'; ctx.beginPath(); ctx.moveTo(r * .78, sy - 14); ctx.quadraticCurveTo(r * .9, sy + 4, r * .78, sy + 6); ctx.quadraticCurveTo(r * .66, sy + 4, r * .78, sy - 14); ctx.fill();
+      }
+    }
+  }
+}
+
+/* ---------- metin, parçacık, efektler ---------- */
+function addText(o) { const t = Object.assign({ x: 0, y: 0, size: 60, color: '#fff', stroke: '#1b1446', s: 1, alpha: 1, rot: 0, text: '' }, o); S.texts.push(t); return t; }
+function removeText(t) { S.texts = S.texts.filter(x => x !== t); }
+function popWord(text, x, y, o = {}) {
+  const t = addText({ text, x, y, size: (o.size || 64) * U, color: o.color || '#ffcf3f', stroke: o.stroke || '#2a1458', s: 0, rot: o.rot ?? rand(-.12, .12) });
+  (async () => { await tween(t, { s: 1 }, 260, E.back); await wait(o.hold ?? 750); await tween(t, { alpha: 0, y: t.y - 40 * U, s: 1.15 }, 300); removeText(t); })();
+  return t;
+}
+function burst(x, y, n, o = {}) {
+  const cols = o.colors || ['#fff', '#ffcf3f', '#ff5d73', '#4cc9f0'];
+  for (let i = 0; i < n; i++) {
+    const a = o.dir !== undefined ? o.dir + (Math.random() - .5) * (o.spread || 1) : Math.random() * Math.PI * 2;
+    const sp = (o.speed || .5) * (.4 + Math.random());
+    S.parts.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - (o.up || 0), g: o.g ?? .0012, life: (o.life || 800) * rand(.6, 1.2), age: 0,
+      size: (o.size || 6) * rand(.6, 1.4) * U, color: cols[i % cols.length], shape: o.shape || 'circle', rot: rand(0, 6), vr: rand(-.02, .02), bounce: !!o.bounce });
+  }
+}
+function confetti() { for (let i = 0; i < 5; i++) burst(W * rand(.1, .9), -10, 26, { dir: Math.PI / 2, spread: 1.4, speed: .35, shape: 'rect', life: 2600, g: .00035, colors: PAL, size: 7 }); }
+function slash(x1, y1, x2, y2, o = {}) { S.slashes.push({ x1, y1, x2, y2, age: 0, life: o.life || 450, w: (o.w || 10) * U, color: o.color || '#8ff0ff' }); }
+function bolt(x1, y1, x2, y2) {
+  const pts = [], n = 10; for (let i = 0; i <= n; i++) { const t = i / n, j = (i === 0 || i === n) ? 0 : rand(-18, 18) * U; pts.push({ x: x1 + (x2 - x1) * t - (y2 - y1) / Math.hypot(x2 - x1, y2 - y1) * j, y: y1 + (y2 - y1) * t + (x2 - x1) / Math.hypot(x2 - x1, y2 - y1) * j }); }
+  S.bolts.push({ pts, age: 0, life: 350 });
+}
+function ring(x, y, max = 220, color = '#fff') { S.rings.push({ x, y, age: 0, life: 520, max: max * U, color }); }
+function impact(x, y, o = {}) {
+  sfx.boom(); S.shake = (o.shake || 16) * U; S.flash = o.flash ?? .55; S.flashColor = o.flashColor || '#fff';
+  ring(x, y, o.ring || 240, o.ringColor || '#fff');
+  burst(x, y, 36, { speed: .7, shape: 'star', colors: o.colors });
+}
+function addBlob(v, x) { const b = new NumBlob(v, x); S.blobs.push(b); return b; }
+function removeBlob(b) { S.blobs = S.blobs.filter(x => x !== b); }
+async function spawnBlob(v, x) {
+  const b = addBlob(v, x); sfx.pop(.9 + Math.random() * .3);
+  burst(x, G - baseR(v), 14, { speed: .35, colors: [b.color, '#fff'] });
+  await tween(b, { s: 1 }, 380, E.back); return b;
+}
+async function spawnOp(sym, x) {
+  const t = addText({ text: sym, x, y: G - 70 * U, size: 96 * U, color: '#fff', stroke: '#1b1446', s: 0 });
+  sfx.pop(1.4); await tween(t, { s: 1 }, 300, E.back); return t;
+}
+function blobHop(b, x, h, dur, ease = E.io) {
+  const x0 = b.x;
+  return anim(dur, t => { b.x = x0 + (x - x0) * t; b.hop = Math.sin(Math.PI * clamp(t, 0, 1)) * h; }, ease)
+    .then(() => { b.hop = 0; b.sy = .8; b.sx = 1.15; tween(b, { sx: 1, sy: 1 }, 400, E.elastic); });
+}
+
+/* ---------- kahraman hareketleri ---------- */
+function heroRunTo(x, dur, faceRight = false) {
+  const h = hero;
+  if (Math.abs(x - h.x) < 2) { if (faceRight) h.dir = 1; return Promise.resolve(); }
+  h.dir = x > h.x ? 1 : -1;
+  const d = dur ?? clamp(Math.abs(x - h.x) * 1.4, 250, 1000);
+  return tween(h, { x }, d, E.io).then(() => { if (faceRight) h.dir = 1; });
+}
+function heroJumpTo(x, endHop, dur, height = 100) {
+  const h = hero, x0 = h.x, h0 = h.hop;
+  if (Math.abs(x - x0) > 2) h.dir = x > x0 ? 1 : -1;
+  return anim(dur, t => { h.x = x0 + (x - x0) * t; h.hop = h0 + (endHop - h0) * t + Math.sin(Math.PI * t) * height * U; }, E.io)
+    .then(() => { if (endHop === 0) { h.hop = 0; h.sqy = .82; h.sqx = 1.12; sfx.land(); tween(h, { sqy: 1, sqx: 1 }, 320, E.back); } });
+}
+function heroHand(ext = 0) {
+  const h = hero, k = U * h.s, sx = h.x + h.dir * 6 * k, sy = G - h.hop - 100 * k, L = (42 + ext) * k;
+  return { x: sx + h.dir * Math.sin(h.armA) * L, y: sy + Math.cos(h.armA) * L };
+}
+function say(text, ms = 1400) {
+  const b = { text, a: 0 }; hero.bubble = b;
+  tween(b, { a: 1 }, 180).then(() => wait(ms)).then(() => hero.bubble === b ? tween(b, { a: 0 }, 250) : null).then(() => { if (hero.bubble === b) hero.bubble = null; });
+}
+async function equip(tool) {
+  if (hero.tool === tool) return;
+  const hp = heroHand(30);
+  burst(hp.x, hp.y, 16, { colors: ['#fff', '#ffcf3f'], speed: .3, shape: 'star' });
+  sfx.pop(1.3); hero.tool = tool; hero.sqy = 1.15; tween(hero, { sqy: 1 }, 300, E.back);
+  await wait(250);
+}
+async function heroCheer() { tween(hero, { armA: 3 }, 200, E.out); hero.happy = 1; await heroJumpTo(hero.x, 0, 520, 90); tween(hero, { armA: .5 }, 300); hero.happy = 0; }
+
+/* ================== Çizim: kahraman ================== */
+function rr(x, y, w, h, r) { ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h); }
+function circle(x, y, r) { ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); }
+function starPath(x, y, R1, r1, rot = 0, n = 5) { ctx.beginPath(); for (let i = 0; i < n * 2; i++) { const q = i % 2 ? r1 : R1, a = rot + i * Math.PI / n - Math.PI / 2; ctx.lineTo(x + Math.cos(a) * q, y + Math.sin(a) * q); } ctx.closePath(); }
+function limb(x, y, a, L, col, w) {
+  ctx.strokeStyle = col; ctx.lineWidth = w; ctx.lineCap = 'round';
+  const ex = x + Math.sin(a) * L, ey = y + Math.cos(a) * L;
+  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(ex, ey); ctx.stroke(); return { x: ex, y: ey };
+}
+function drawTool(t, h) {
+  if (!t) return;
+  if (t === 'sword') {
+    ctx.fillStyle = '#6b3d1f'; rr(-4, -18, 8, 22, 3); ctx.fill();
+    ctx.fillStyle = '#ffcf3f'; rr(-15, 4, 30, 8, 3); ctx.fill();
+    const g = ctx.createLinearGradient(-7, 0, 7, 0); g.addColorStop(0, '#cfd8ff'); g.addColorStop(.5, '#ffffff'); g.addColorStop(1, '#8e9bd6');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(-6, 12); ctx.lineTo(-6, 104); ctx.lineTo(0, 122); ctx.lineTo(6, 104); ctx.lineTo(6, 12); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#5a66a8'; ctx.lineWidth = 2; ctx.stroke();
+    if (h && h.glint > 0) { ctx.fillStyle = '#fff'; ctx.shadowColor = '#bff6ff'; ctx.shadowBlur = 20; starPath(0, 110, 30 * h.glint, 6 * h.glint, time * .01, 4); ctx.fill(); ctx.shadowBlur = 0; }
+  } else if (t === 'hammer') {
+    ctx.fillStyle = '#8a5a2b'; rr(-4, -12, 8, 80, 3); ctx.fill();
+    ctx.fillStyle = '#7d8597'; rr(-32, 60, 64, 42, 8); ctx.fill();
+    ctx.fillStyle = '#aab3c5'; rr(-28, 64, 56, 9, 4); ctx.fill();
+    ctx.fillStyle = '#4f5568'; rr(-32, 60, 9, 42, 4); ctx.fill(); rr(23, 60, 9, 42, 4); ctx.fill();
+  } else if (t === 'wand') {
+    ctx.fillStyle = '#3b1f5e'; rr(-3.5, -8, 7, 62, 3); ctx.fill();
+    ctx.fillStyle = '#fff'; rr(-3.5, 46, 7, 8, 2); ctx.fill();
+    ctx.fillStyle = '#ffe066'; ctx.shadowColor = '#ffe066'; ctx.shadowBlur = 25;
+    starPath(0, 66, 17, 7, time * .004); ctx.fill(); ctx.shadowBlur = 0;
+  } else if (t === 'magnet') {
+    ctx.lineWidth = 18; ctx.lineCap = 'butt'; ctx.strokeStyle = '#ff3b5c';
+    ctx.beginPath(); ctx.moveTo(-22, 72); ctx.lineTo(-22, 40); ctx.arc(0, 40, 22, Math.PI, 0, false); ctx.lineTo(22, 72); ctx.stroke();
+    ctx.strokeStyle = '#e8ecff'; ctx.beginPath(); ctx.moveTo(-22, 70); ctx.lineTo(-22, 86); ctx.moveTo(22, 70); ctx.lineTo(22, 86); ctx.stroke();
+  }
+}
+function drawHero(h, alpha = 1, ghost = false) {
+  const k = U * h.s;
+  ctx.save(); ctx.globalAlpha *= alpha;
+  if (!ghost) {
+    const sh = Math.max(.3, 1 - h.hop / 320);
+    ctx.fillStyle = 'rgba(0,0,0,.32)'; ctx.beginPath(); ctx.ellipse(h.x, G + 2, 36 * k * sh, 9 * k * sh, 0, 0, 7); ctx.fill();
+  }
+  ctx.translate(h.x, G - h.hop);
+  ctx.translate(0, -90 * k); ctx.rotate(h.rot * h.dir); ctx.translate(0, 90 * k);
+  ctx.scale(h.dir * k * h.sqx, k * h.sqy);
+  const T = time, DARK = ghost ? '#6fe6ff' : '#2d3289', DARK2 = ghost ? '#4fc6e6' : '#1d2166', SKIN = '#ffd3a8', RED = '#ff3b5c';
+  // bandana kuyrukları
+  const flow = 1 + h.walk * .8 + (h.dash ? 1 : 0);
+  ctx.strokeStyle = RED; ctx.lineWidth = 7; ctx.lineCap = 'round';
+  for (let i = 0; i < 2; i++) {
+    ctx.beginPath(); ctx.moveTo(-30, -166);
+    ctx.quadraticCurveTo(-52 * flow, -170 + Math.sin(T * .015 + i) * 10 + i * 8, -78 * flow, -152 + Math.sin(T * .012 + i * 1.7) * 14 + i * 14);
+    ctx.stroke();
+  }
+  // arka kol & bacaklar
+  const sw = Math.sin(h.phase) * .7 * h.walk, air = h.hop > 4;
+  limb(-4, -100, -.25 - sw, 40, DARK2, 12);
+  const la = air ? .7 : sw, lb = air ? -.5 : -sw;
+  const f1 = limb(-6, -55, lb, 52, DARK2, 15), f2 = limb(6, -55, la, 52, DARK, 15);
+  ctx.fillStyle = '#141738';
+  ctx.beginPath(); ctx.ellipse(f1.x + 5, f1.y + 2, 11, 7, 0, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(f2.x + 5, f2.y + 2, 11, 7, 0, 0, 7); ctx.fill();
+  // gövde
+  ctx.fillStyle = DARK; rr(-25, -116, 50, 68, 18); ctx.fill();
+  ctx.fillStyle = '#ffcf3f'; rr(-25, -72, 50, 9, 3); ctx.fill();
+  // kafa
+  ctx.fillStyle = DARK; circle(0, -146, 36); ctx.fill();
+  ctx.save(); circle(0, -146, 36); ctx.clip();
+  ctx.fillStyle = SKIN; rr(-14, -162, 60, 26, 11); ctx.fill();
+  ctx.fillStyle = RED; ctx.fillRect(-40, -180, 80, 12);
+  ctx.restore();
+  ctx.fillStyle = RED; circle(-32, -173, 7); ctx.fill();
+  // gözler
+  if (h.happy) {
+    ctx.strokeStyle = '#1b1446'; ctx.lineWidth = 3.5;
+    for (const ex of [8, 24]) { ctx.beginPath(); ctx.arc(ex, -147, 6, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke(); }
+  } else {
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.ellipse(8, -149, 7.5, 8.5, 0, 0, 7); ctx.fill(); ctx.beginPath(); ctx.ellipse(24, -149, 6.5, 8.5, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#1b1446'; circle(10.5, -148, 4); ctx.fill(); circle(26, -148, 3.6); ctx.fill();
+    if (h.brow) { ctx.strokeStyle = '#1b1446'; ctx.lineWidth = 3.5; ctx.beginPath(); ctx.moveTo(1, -162); ctx.lineTo(15, -157); ctx.moveTo(19, -157); ctx.lineTo(31, -161); ctx.stroke(); }
+  }
+  // ön kol + alet
+  ctx.save(); ctx.translate(6, -100);
+  const a = h.armA, hx = Math.sin(a) * 42, hy = Math.cos(a) * 42;
+  ctx.strokeStyle = DARK; ctx.lineWidth = 12; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(hx, hy); ctx.stroke();
+  ctx.translate(hx, hy); ctx.rotate(-a); drawTool(h.tool, h);
+  ctx.fillStyle = SKIN; circle(0, 0, 8); ctx.fill();
+  ctx.restore();
+  ctx.restore();
+}
+function drawBubble() {
+  const b = hero.bubble; if (!b || b.a <= .01) return;
+  ctx.save(); ctx.globalAlpha = b.a; ctx.font = F(26 * U, 600);
+  const tw = ctx.measureText(b.text).width, bw = tw + 36 * U, bh = 50 * U;
+  const bx = clamp(hero.x - bw * .3, 10, W - bw - 10), by = G - hero.hop - 222 * U - bh;
+  ctx.fillStyle = '#fff'; rr(bx, by, bw, bh, 18 * U); ctx.fill();
+  const tx = clamp(hero.x, bx + 20 * U, bx + bw - 20 * U);
+  ctx.beginPath(); ctx.moveTo(tx - 10 * U, by + bh - 1); ctx.lineTo(tx + 10 * U, by + bh - 1); ctx.lineTo(hero.x, by + bh + 16 * U); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#1b1446'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(b.text, bx + bw / 2, by + bh / 2 + 1);
+  ctx.restore();
+}
+
+/* ================== Çizim: genel ================== */
+function drawPiece(p) {
+  const b = p.b, r = b.r;
+  ctx.save(); ctx.globalAlpha *= p.alpha;
+  ctx.translate(b.x + p.dx, b.y + p.dy); ctx.rotate(p.rot); ctx.rotate(p.ang);
+  ctx.beginPath(); ctx.rect(p.x0, -r * 3, p.x1 - p.x0, r * 6); ctx.clip();
+  ctx.save(); ctx.rotate(-p.ang); ctx.scale(b.s * b.sx, b.s * b.sy); b.body(); ctx.restore();
+  ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.lineWidth = 5 * U;
+  for (const x of [p.x0, p.x1]) if (Math.abs(x) < r * 1.5) { ctx.beginPath(); ctx.moveTo(x, -r * 1.2); ctx.lineTo(x, r * 1.2); ctx.stroke(); }
+  ctx.restore();
+}
+function drawText(t) {
+  if (t.s <= .01 || t.alpha <= .01) return;
+  ctx.save(); ctx.globalAlpha *= t.alpha; ctx.font = F(t.size);
+  const w = ctx.measureText(t.text).width * t.s;
+  const x = clamp(t.x, w / 2 + 12, W - w / 2 - 12);
+  ctx.translate(x, t.y); ctx.rotate(t.rot); ctx.scale(t.s, t.s);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+  ctx.lineWidth = t.size * .18; ctx.strokeStyle = t.stroke; ctx.strokeText(t.text, 0, 0);
+  ctx.fillStyle = t.color; ctx.fillText(t.text, 0, 0);
+  ctx.restore();
+}
+function drawField() {
+  const f = S.field; if (!f) return;
+  const m = heroHand(80);
+  ctx.save(); ctx.lineWidth = 4 * U; ctx.setLineDash([10 * U, 12 * U]); ctx.lineDashOffset = time * .2;
+  f.targets.forEach((b, bi) => {
+    for (let k = 0; k < 3; k++) {
+      ctx.strokeStyle = k % 2 ? 'rgba(255,93,115,.85)' : 'rgba(76,201,240,.85)';
+      const tx = b.x, ty = b.y - b.r * .3, sgn = b.x < m.x ? -1 : 1;
+      ctx.beginPath(); ctx.moveTo(m.x, m.y);
+      ctx.quadraticCurveTo((m.x + tx) / 2 + sgn * (30 + k * 30) * U, (m.y + ty) / 2 - k * 25 * U, tx, ty); ctx.stroke();
+    }
+  });
+  ctx.restore();
+}
+function drawFX() {
+  for (const s of S.slashes) {
+    const p = s.age / s.life, grow = Math.min(1, s.age / 70);
+    const ex = s.x1 + (s.x2 - s.x1) * grow, ey = s.y1 + (s.y2 - s.y1) * grow;
+    ctx.save(); ctx.lineCap = 'round'; ctx.globalAlpha = 1 - p;
+    ctx.shadowColor = s.color; ctx.shadowBlur = 25;
+    ctx.strokeStyle = s.color; ctx.lineWidth = s.w * (1 - p * .7) * 1.8; ctx.beginPath(); ctx.moveTo(s.x1, s.y1); ctx.lineTo(ex, ey); ctx.stroke();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = s.w * (1 - p * .7) * .6; ctx.stroke();
+    ctx.restore();
+  }
+  for (const b of S.bolts) {
+    ctx.save(); ctx.globalAlpha = 1 - b.age / b.life; ctx.strokeStyle = '#e0b3ff'; ctx.shadowColor = '#c77dff'; ctx.shadowBlur = 25; ctx.lineWidth = 6 * U; ctx.lineJoin = 'round';
+    ctx.beginPath(); b.pts.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)); ctx.stroke();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2 * U; ctx.stroke(); ctx.restore();
+  }
+  for (const r of S.rings) {
+    const p = r.age / r.life; ctx.save(); ctx.globalAlpha = (1 - p) * .9; ctx.strokeStyle = r.color; ctx.lineWidth = 10 * U * (1 - p) + 1;
+    ctx.beginPath(); ctx.arc(r.x, r.y, r.max * E.out(p), 0, 7); ctx.stroke(); ctx.restore();
+  }
+  for (const s of S.mstars) {
+    ctx.save(); ctx.fillStyle = '#ffe066'; ctx.shadowColor = '#ffe066'; ctx.shadowBlur = 25;
+    starPath(s.x, s.y, 20 * U * s.s, 8 * U * s.s, time * .006 + s.ph); ctx.fill(); ctx.restore();
+  }
+  for (const p of S.parts) {
+    ctx.globalAlpha = Math.max(0, 1 - p.age / p.life); ctx.fillStyle = p.color;
+    if (p.shape === 'star') { starPath(p.x, p.y, p.size * 1.5, p.size * .6, p.rot); ctx.fill(); }
+    else if (p.shape === 'rect') { ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.fillRect(-p.size, -p.size * .5, p.size * 2, p.size); ctx.restore(); }
+    else if (p.shape === 'rock') { ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.beginPath(); ctx.moveTo(-p.size, 0); ctx.lineTo(-p.size * .3, -p.size); ctx.lineTo(p.size, -p.size * .4); ctx.lineTo(p.size * .6, p.size * .8); ctx.closePath(); ctx.fill(); ctx.restore(); }
+    else { circle(p.x, p.y, p.size); ctx.fill(); }
+  }
+  ctx.globalAlpha = 1;
+}
+function drawTitle() {
+  const t = S.title;
+  if (t && t.s > .01) {
+    ctx.save(); ctx.translate(W / 2, vertical ? H * .12 : H * .16); ctx.scale(t.s, t.s); ctx.globalAlpha *= t.a;
+    const size = vertical ? 78 : 88, lines = vertical ? ['MATEMATİK', 'NİNJASI'] : ['MATEMATİK NİNJASI'];
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round'; ctx.font = F(size);
+    lines.forEach((ln, i) => {
+      const y = i * size * 1.02 + Math.sin(time * .003 + i) * 4;
+      ctx.lineWidth = size * .22; ctx.strokeStyle = '#1b0f45'; ctx.strokeText(ln, 0, y);
+      const g = ctx.createLinearGradient(0, y - size / 2, 0, y + size / 2); g.addColorStop(0, '#fff3a6'); g.addColorStop(1, '#ff9f1c');
+      ctx.fillStyle = g; ctx.fillText(ln, 0, y);
+    });
+    ctx.font = F(32, 600); ctx.fillStyle = '#f3f0ff'; ctx.fillText('4 işlem • 4 süper güç', 0, lines.length * size * 1.02 - size * .2 + 14);
+    if (S.hint) {
+      ctx.globalAlpha *= .6 + .4 * Math.sin(time * .005);
+      ctx.font = F(34); ctx.fillStyle = '#ffcf3f'; ctx.fillText('▶  Başlamak için tıkla', 0, lines.length * size * 1.02 + 50);
+    }
+    ctx.restore();
+  }
+  for (const c of S.cards) {
+    if (c.s <= .01) continue;
+    ctx.save(); ctx.translate(c.x, c.y); ctx.scale(c.s, c.s);
+    const cw = 170 * U, ch = 170 * U;
+    ctx.fillStyle = 'rgba(18,12,48,.88)'; rr(-cw / 2, -ch / 2, cw, ch, 20 * U); ctx.fill();
+    ctx.lineWidth = 4 * U; ctx.strokeStyle = c.color; ctx.stroke();
+    ctx.font = F(54 * U); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = c.color; ctx.fillText(c.op, -cw / 2 + 32 * U, -ch / 2 + 34 * U);
+    ctx.save(); ctx.translate(0, -12 * U); ctx.scale(.55 * U, .55 * U); ctx.rotate(Math.PI); ctx.translate(0, -52); drawTool(c.tool, null); ctx.restore();
+    ctx.font = F(22 * U); ctx.fillStyle = '#f3f0ff'; ctx.fillText(c.name, 0, ch / 2 - 44 * U);
+    ctx.font = F(17 * U, 600); ctx.fillStyle = '#a69fd6'; ctx.fillText(c.label, 0, ch / 2 - 20 * U);
+    ctx.restore();
+  }
+}
+function drawHud() {
+  const h = S.hud; if (!h) return;
+  const y = (vertical ? H * .12 : 84) + h.off, fs = vertical ? 54 : 60;
+  ctx.save(); ctx.textBaseline = 'middle'; ctx.font = F(fs);
+  const left = h.expr + ' = ', ansTxt = h.ans === null ? '?' : String(h.ans);
+  const wl = ctx.measureText(left).width, wa = Math.max(ctx.measureText(ansTxt).width, fs * .6), tw = wl + wa;
+  const cw = tw + 70, ch = fs * 1.6, x0 = W / 2 - cw / 2;
+  ctx.fillStyle = 'rgba(18,12,48,.86)'; rr(x0, y - ch / 2, cw, ch, 24); ctx.fill();
+  ctx.lineWidth = 4; ctx.strokeStyle = h.color; ctx.stroke();
+  // etiket
+  const tag = h.boss ? 'BOSS SORUSU' : h.custom ? 'SENİN SORUN' : `SORU ${h.idx}/${h.total}`;
+  ctx.font = F(22); const tgw = ctx.measureText(tag).width + 30;
+  ctx.fillStyle = h.color; rr(W / 2 - tgw / 2, y - ch / 2 - 17, tgw, 32, 16); ctx.fill();
+  ctx.fillStyle = '#140d30'; ctx.textAlign = 'center'; ctx.fillText(tag, W / 2, y - ch / 2 - 0);
+  // ifade
+  ctx.font = F(fs); ctx.textAlign = 'left'; ctx.fillStyle = '#fff'; ctx.fillText(left, W / 2 - tw / 2, y + 4);
+  ctx.save(); ctx.translate(W / 2 - tw / 2 + wl + wa / 2, y + 4);
+  const sc = h.ans === null ? 1 + .1 * Math.sin(time * .008) : h.ansS; ctx.scale(sc, sc); ctx.textAlign = 'center';
+  if (h.ans !== null) { ctx.shadowColor = '#3ddc97'; ctx.shadowBlur = 25; ctx.fillStyle = '#3ddc97'; } else ctx.fillStyle = '#ffcf3f';
+  ctx.fillText(ansTxt, 0, 0); ctx.restore();
+  // alt bilgi
+  ctx.textAlign = 'center'; ctx.font = F(vertical ? 26 : 24, 600); ctx.fillStyle = h.color;
+  ctx.fillText(`${h.label} • ${h.sub}`, W / 2, y + ch / 2 + 26);
+  if (h.step) { ctx.font = F(28); ctx.fillStyle = '#fff'; ctx.fillText(h.step, W / 2, y + ch / 2 + 62); }
+  ctx.restore();
+}
+function drawCount() {
+  const c = S.count; if (!c || c.s <= .01) return;
+  ctx.save(); ctx.translate(c.x, c.y); ctx.scale(c.s, c.s);
+  const R0 = 56 * U;
+  ctx.fillStyle = 'rgba(18,12,48,.88)'; circle(0, 0, R0); ctx.fill();
+  ctx.lineWidth = 10 * U; ctx.strokeStyle = 'rgba(255,255,255,.15)'; circle(0, 0, R0); ctx.stroke();
+  ctx.strokeStyle = '#ffcf3f'; ctx.lineCap = 'round'; ctx.beginPath(); ctx.arc(0, 0, R0, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (1 - c.p)); ctx.stroke();
+  const pulse = 1 + .3 * Math.max(0, 1 - c.p * 4);
+  ctx.save(); ctx.scale(pulse, pulse); ctx.font = F(64 * U); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.fillText(c.n, 0, 4); ctx.restore();
+  ctx.font = F(32 * U); ctx.textAlign = 'center'; ctx.lineJoin = 'round'; ctx.lineWidth = 7; ctx.strokeStyle = '#1b1446';
+  ctx.strokeText('Sen de düşün!', 0, R0 + 36 * U); ctx.fillStyle = '#ffcf3f'; ctx.fillText('Sen de düşün!', 0, R0 + 36 * U);
+  ctx.restore();
+}
+function drawEnd() {
+  const e = S.end; if (!e || e.s <= .01) return;
+  ctx.save(); ctx.translate(W / 2, vertical ? H * .22 : H * .3); ctx.scale(e.s, e.s);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+  ctx.font = F(vertical ? 84 : 96); ctx.lineWidth = 18; ctx.strokeStyle = '#1b0f45'; ctx.strokeText('TEBRİKLER!', 0, 0);
+  const g = ctx.createLinearGradient(0, -50, 0, 50); g.addColorStop(0, '#b6ffda'); g.addColorStop(1, '#2ec4b6'); ctx.fillStyle = g; ctx.fillText('TEBRİKLER!', 0, 0);
+  ctx.font = F(vertical ? 34 : 38, 600); ctx.fillStyle = '#fff'; ctx.lineWidth = 8; ctx.strokeText(e.line1, 0, 80); ctx.fillText(e.line1, 0, 80);
+  ctx.font = F(vertical ? 34 : 38); ctx.fillStyle = '#ffcf3f'; ctx.strokeText(e.line2, 0, 132); ctx.fillText(e.line2, 0, 132);
+  ctx.restore();
+}
+
+/* ================== Ana döngü ================== */
+function update(dt) {
+  runJobs(dt);
+  const h = hero;
+  const vx = (h.x - h.lastX) / Math.max(dt, 1); h.lastX = h.x;
+  h.walk += ((Math.abs(vx) > .03 && h.hop < 2 ? 1 : 0) - h.walk) * Math.min(1, dt * .015);
+  h.phase += Math.min(Math.abs(vx), 1.2) * dt * .03;
+  if (h.dash) h.ghosts.push({ x: h.x, hop: h.hop, armA: h.armA, a: .6 });
+  h.ghosts.forEach(g => g.a -= dt * .003); h.ghosts = h.ghosts.filter(g => g.a > 0);
+  h.glint = Math.max(0, h.glint - dt * .0015);
+  S.blobs.forEach(b => b.update(dt));
+  for (const p of S.parts) {
+    p.age += dt; p.vy += p.g * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt;
+    if (p.bounce && p.y > G && p.vy > 0) { p.y = G; p.vy *= -.35; p.vx *= .6; }
+  }
+  S.parts = S.parts.filter(p => p.age < p.life);
+  [S.slashes, S.bolts, S.rings].forEach(arr => arr.forEach(s => s.age += dt));
+  S.slashes = S.slashes.filter(s => s.age < s.life); S.bolts = S.bolts.filter(s => s.age < s.life); S.rings = S.rings.filter(s => s.age < s.life);
+  S.shake *= Math.pow(.88, dt / 16); S.flash = Math.max(0, S.flash - dt * .0025);
+  floaters.forEach(f => { f.y -= f.v * dt; if (f.y < -60) { f.y = H + 60; f.x = rand(0, W); } });
+}
+function draw() {
+  ctx.setTransform(R, 0, 0, R, 0, 0);
+  ctx.drawImage(bg, 0, 0, W, H);
+  for (const s of bgStars) { ctx.globalAlpha = .4 + .6 * Math.abs(Math.sin(time * .0015 + s.ph)); ctx.fillStyle = '#fff'; circle(s.x, s.y, s.r); ctx.fill(); }
+  ctx.globalAlpha = 1;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (const f of floaters) { ctx.save(); ctx.globalAlpha = .07; ctx.font = F(f.size); ctx.fillStyle = '#fff'; ctx.translate(f.x, f.y); ctx.rotate(f.rot); ctx.fillText(f.s, 0, 0); ctx.restore(); }
+  ctx.save();
+  if (S.shake > .3) ctx.translate((Math.random() - .5) * S.shake, (Math.random() - .5) * S.shake);
+  drawTitle();
+  S.pieces.forEach(drawPiece);
+  S.blobs.forEach(b => b.draw());
+  drawField();
+  hero.ghosts.forEach(g => drawHero(Object.assign({}, hero, g), g.a * .5, true));
+  drawHero(hero);
+  drawBubble();
+  drawFX();
+  S.texts.forEach(drawText);
+  ctx.restore();
+  drawHud(); drawCount(); drawEnd();
+  if (S.flash > 0) { ctx.globalAlpha = Math.min(1, S.flash); ctx.fillStyle = S.flashColor; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; }
+  if (paused && started) {
+    ctx.fillStyle = 'rgba(10,6,30,.55)'; ctx.fillRect(0, 0, W, H);
+    ctx.font = F(64); ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.fillText('⏸ Duraklatıldı', W / 2, H / 2);
+  }
+}
+let last = performance.now();
+function frame(t) {
+  const real = Math.min(50, t - last); last = t;
+  if (!paused) { const dt = real * speed; time += dt; update(dt); }
+  draw();
+  requestAnimationFrame(frame);
+}
+
+/* ================== İşlem çözümleri ================== */
+const OPINFO = {
+  '+': { name: 'TOPLAMA', tool: 'magnet', power: 'Mıknatısla birleştir', toolName: 'Mıknatıs', color: '#2ec4b6' },
+  '−': { name: 'ÇIKARMA', tool: 'hammer', power: 'Çekiçle kopar', toolName: 'Çekiç', color: '#ff5d73' },
+  '×': { name: 'ÇARPMA', tool: 'wand', power: 'Sihirle kopyala', toolName: 'Sihirli Değnek', color: '#c77dff' },
+  '÷': { name: 'BÖLME', tool: 'sword', power: 'Kılıçla eşit parçala', toolName: 'Kılıç', color: '#ffa62b' },
+};
+const compute = (a, op, b) => op === '+' ? a + b : op === '−' ? a - b : op === '×' ? a * b : a / b;
+
+/* TOPLAMA: + işareti mıknatısa dönüşür, iki sayıyı çekip kaynaştırır */
+async function solveAdd(A, op, B) {
+  await equip('magnet'); say('Mıknatıs gücü!', 900);
+  await heroRunTo(CX, undefined, true);
+  await tween(op, { s: 0, alpha: 0, y: heroHand(40).y }, 260, E.in); removeText(op);
+  popWord('MIKNATIS!', CX, G - 330 * U, { color: '#ff5d73' });
+  tween(hero, { armA: .02 }, 300);
+  await tween(hero, { hop: Math.max(A.r, B.r) * 2 + 75 * U }, 400, E.out);
+  S.field = { targets: [A, B] }; sfx.hum();
+  A.mood = B.mood = 'scared'; A.lookFixed = B.lookFixed = true; A.look = 1; B.look = -1;
+  await wait(450);
+  const ra = A.r, rb = B.r;
+  await Promise.all([tween(A, { x: CX - ra * .55 }, 750, E.in), tween(B, { x: CX + rb * .55 }, 750, E.in)]);
+  S.field = null;
+  impact(CX, G - Math.max(ra, rb), { colors: [A.color, B.color, '#fff', '#ffcf3f'] });
+  removeBlob(A); removeBlob(B);
+  const C = addBlob(A.v + B.v, CX); C.s = .55; C.mood = 'joy'; C.glow = 1;
+  tween(C, { s: 1 }, 800, E.elastic);
+  popWord('BİRLEŞTİ!', CX, G - baseR(C.v) * 2 - 60 * U, { color: '#3ddc97' });
+  tween(hero, { armA: .5 }, 400);
+  await heroJumpTo(CX - baseR(C.v) - 85 * U, 0, 480, 40); hero.dir = 1;
+  await wait(250); C.mood = 'happy';
+  return [C];
+}
+
+/* ÇIKARMA: eksilen sayı büyük sayıya yapışır, çekiç darbesiyle kopup uçar */
+async function solveSub(A, op, B) {
+  await equip('hammer'); say('Çekiç zamanı!', 900);
+  tween(op, { s: 0, alpha: 0 }, 250).then(() => removeText(op));
+  B.mood = 'scared';
+  popWord(`${B.v} tanesi kopacak!`, CX, G - 330 * U, { size: 48, color: '#ff5d73' });
+  const target = A.x + A.r * .95 + B.r * .85 * .3;
+  tween(B, { s: .85 }, 450);
+  await blobHop(B, target, 120 * U, 520);
+  A.lookFixed = true; A.look = 1; A.mood = 'scared';
+  await wait(200);
+  const rA = A.r, T = { x: A.x + rA * .82, y: G - rA * 1.5 };
+  const fa = 1.25, reach = 126 * U;
+  const hx = T.x - 6 * U - Math.sin(fa) * reach;
+  const hopT = Math.max(0, G - 100 * U + Math.cos(fa) * reach - T.y);
+  hero.brow = 1;
+  await heroRunTo(hx - 50 * U, undefined, true);
+  await Promise.all([heroJumpTo(hx, hopT + 120 * U, 380, 50), tween(hero, { armA: 3.6 }, 380, E.out)]);
+  hero.dir = 1;
+  await wait(140);
+  sfx.swoosh();
+  await Promise.all([tween(hero, { armA: fa }, 110, E.in), tween(hero, { hop: hopT }, 110, E.in)]);
+  impact(T.x, T.y, { colors: ['#aab3c5', '#7d8597', A.color, '#ffcf3f'], ringColor: '#ffcf3f', ring: 180 });
+  burst(T.x, T.y, 18, { shape: 'rock', colors: ['#c9c2e8', '#8c83b8', A.color], speed: .5, up: .4, bounce: true, life: 1300, size: 8 });
+  popWord('BAM!', T.x, T.y - 90 * U, { size: 96, color: '#ff3b5c', rot: -.15 });
+  A.sy = .78; A.sx = 1.18; tween(A, { sx: 1, sy: 1 }, 600, E.elastic);
+  // kopan parça uçuyor
+  B.ground = false; const bx0 = B.x, by0 = B.y;
+  sfx.whistle();
+  popWord('GÜLE GÜLE!', bx0 + 170 * U, by0 - 210 * U, { size: 44, color: '#4cc9f0' });
+  anim(1200, t => { B.x = bx0 + t * W * .75; B.y = by0 - Math.sin(t * Math.PI * .9) * 260 * U + t * t * 140 * U; B.rot = t * 12; B.s = .85 * (1 - t * .5); }).then(() => removeBlob(B));
+  sfx.shrink();
+  await tween(A, { disp: A.v - B.v }, 850, E.out); A.v = A.v - B.v;
+  tween(hero, { armA: .5 }, 400); hero.brow = 0;
+  await heroJumpTo(hero.x - 60 * U, 0, 420, 30); hero.dir = 1;
+  A.mood = 'joy'; A.lookFixed = false;
+  popWord(`Geriye ${A.v} kaldı!`, A.x, G - A.r * 2 - 60 * U, { size: 48, color: '#3ddc97' });
+  await wait(600); A.mood = 'happy';
+  return [A];
+}
+
+/* ÇARPMA: değnek ikinci sayıyı yıldızlara çevirir, her yıldız bir kopya yaratır, sonra hepsi birleşir */
+async function solveMul(A, op, B) {
+  const a = A.v, n = B.v;
+  await equip('wand'); say('Abrakadabra!', 900);
+  await heroRunTo(CX - 10 * U, undefined, true);
+  tween(hero, { armA: 2.1 }, 250, E.out); await wait(200);
+  const tip = heroHand(75);
+  bolt(tip.x, tip.y, B.x, B.y); sfx.zap();
+  tween(op, { s: 0, alpha: 0 }, 250).then(() => removeText(op));
+  await wait(200);
+  removeBlob(B); burst(B.x, B.y, 26, { colors: ['#ffe066', '#fff', '#c77dff'], shape: 'star', speed: .5 }); ring(B.x, B.y, 160, '#c77dff');
+  const stars = [];
+  for (let i = 0; i < n; i++) { const s = { x: B.x, y: B.y, s: 0, ph: i }; S.mstars.push(s); stars.push(s); }
+  popWord('KOPYALA!', B.x, G - 330 * U, { color: '#c77dff' });
+  sfx.magic();
+  await Promise.all(stars.map((s, i) => tween(s, { s: 1, x: B.x + (i - (n - 1) / 2) * 34 * U, y: B.y - 110 * U - (i % 2) * 24 * U }, 450, E.out)));
+  const mid = W / 2, want = A.r * 2.25, spacing = Math.min(want, (W * .92) / n), sc = Math.min(1, spacing / want);
+  const slots = [...Array(n)].map((_, i) => mid + (i - (n - 1) / 2) * spacing);
+  heroJumpTo(mid, A.r * 2 * sc + 90 * U, 600, 60);
+  tween(hero, { armA: 2.6 }, 400);
+  await Promise.all([blobHop(A, slots[0], 90 * U, 520), tween(A, { s: sc }, 520)]);
+  A.mood = 'joy'; A.tag = '1';
+  const clones = [A];
+  for (let i = 0; i < n; i++) {
+    const s = stars[i], tx = slots[i], ty = G - A.r * sc, sx0 = s.x, sy0 = s.y;
+    await anim(240, t => { s.x = sx0 + (tx - sx0) * t; s.y = sy0 + (ty - sy0) * t - Math.sin(Math.PI * t) * 60 * U; }, E.io);
+    S.mstars = S.mstars.filter(x => x !== s);
+    burst(tx, ty, 16, { colors: ['#ffe066', '#fff', A.color], shape: 'star', speed: .35 });
+    sfx.pop(1 + i * .15);
+    if (i === 0) { A.glow = 1; continue; }
+    const c = addBlob(a, tx); c.color = A.color; c.mood = 'joy'; c.tag = String(i + 1);
+    tween(c, { s: sc }, 320, E.back); clones.push(c);
+  }
+  const f = addText({ text: Array(n).fill(a).join(' + '), x: mid, y: G + (H - G) * .45, size: (vertical ? 46 : 42) * U, color: '#fff', s: 0 });
+  tween(f, { s: 1 }, 320, E.back);
+  await wait(1100);
+  popWord('HEPSİ BİR OLSUN!', mid, G - 330 * U, { color: '#ffe066', size: 58 });
+  anim(700, t => hero.armA = 2.6 + Math.sin(t * Math.PI * 4) * .5);
+  clones.forEach(c => c.tag = null);
+  heroJumpTo(mid - baseR(a * n) - 90 * U, 0, 900, 60).then(() => { hero.dir = 1; tween(hero, { armA: .5 }, 300); });
+  await Promise.all(clones.map(c => blobHop(c, mid, 150 * U, 650, E.in)));
+  impact(mid, G - A.r * sc, { colors: [A.color, '#ffe066', '#fff', '#c77dff'], ringColor: '#c77dff' });
+  clones.forEach(removeBlob);
+  tween(f, { alpha: 0 }, 300).then(() => removeText(f));
+  const C = addBlob(a * n, mid); C.s = .5; C.mood = 'joy'; C.glow = 1;
+  tween(C, { s: 1 }, 800, E.elastic);
+  popWord(`${n} tane ${a} = ${a * n}`, mid, G - baseR(a * n) * 2 - 60 * U, { size: 50, color: '#3ddc97' });
+  await wait(900); C.mood = 'happy';
+  return [C];
+}
+
+/* BÖLME: kılıçla tek hamlede eşit parçalara keser, parçalar yeni sayılara dönüşür */
+async function solveDiv(A, op, B) {
+  const n = B.v, q = A.v / n;
+  await equip('sword'); say('Kılıcım hazır!', 900);
+  popWord(`${n} eşit parça!`, B.x, G - 330 * U, { color: '#ffa62b' });
+  tween(op, { s: 0, alpha: 0 }, 250).then(() => removeText(op));
+  B.mood = 'joy'; await wait(350);
+  await tween(B, { s: 0 }, 280, E.in); removeBlob(B);
+  burst(B.x, G - B.r, 16, { colors: [B.color, '#fff'], speed: .4 });
+  A.mood = 'scared'; A.lookFixed = true; A.look = -1;
+  await tween(A, { x: CX }, 450);
+  const r = A.r;
+  await heroRunTo(A.x - r - 110 * U, undefined, true);
+  hero.brow = 1;
+  await tween(hero, { armA: 3.1 }, 300, E.out);
+  hero.glint = 1; sfx.clang();
+  popWord('HİYAAA!', hero.x + 30 * U, G - 260 * U, { color: '#fff', size: 58 });
+  await wait(550);
+  // hızlı atılış + kesikler
+  hero.dash = true;
+  const ang = .22, cuts = [...Array(n - 1)].map((_, i) => -r + 2 * r * (i + 1) / n);
+  const x0 = hero.x, x1 = A.x + r + 120 * U, ca = Math.cos(ang), sa = Math.sin(ang), L = r * 1.35;
+  let made = 0; sfx.swoosh();
+  await anim(280, t => {
+    hero.x = x0 + (x1 - x0) * t; hero.armA = 3.1 - t * 2.6;
+    const k = Math.min(n - 1, Math.floor(t * n));
+    while (made < k) {
+      const c = cuts[made];
+      slash(A.x + c * ca + L * sa, A.y + c * sa - L * ca, A.x + c * ca - L * sa, A.y + c * sa + L * ca, { life: 1000, w: 12 });
+      sfx.swoosh(); made++;
+    }
+  }, E.io);
+  hero.dash = false; hero.dir = 1;
+  await tween(hero, { armA: .35 }, 500);
+  say('Zaten kesildin.', 900);
+  await wait(700);
+  sfx.clang(); S.shake = 8 * U;
+  // parçalara ayrıl
+  removeBlob(A);
+  const pieces = [...Array(n)].map((_, i) => ({ b: A, x0: i === 0 ? -r * 3 : cuts[i - 1], x1: i === n - 1 ? r * 3 : cuts[i], dx: 0, dy: 0, rot: 0, ang, alpha: 1 }));
+  S.pieces.push(...pieces);
+  burst(A.x, A.y, 24, { colors: ['#fff', '#bff6ff', A.color], speed: .6, shape: 'star' });
+  heroRunTo(HOME, 700, true);
+  const mid = vertical ? W / 2 : CX, want = baseR(q) * 2.4, spacing = Math.min(want, (W * .9) / n), sc = Math.min(1, spacing / want);
+  const slots = [...Array(n)].map((_, i) => mid + (i - (n - 1) / 2) * spacing);
+  const mids = pieces.map((_, i) => -r + 2 * r * (i + .5) / n);
+  await Promise.all(pieces.map((p, i) => anim(600, t => {
+    p.dx = (slots[i] - A.x - mids[i] * ca) * t; p.dy = -Math.sin(t * Math.PI) * 60 * U; p.rot = (i - (n - 1) / 2) * .12 * Math.sin(t * Math.PI);
+  }, E.out)));
+  const res = [];
+  for (let i = 0; i < n; i++) {
+    S.pieces = S.pieces.filter(p => p !== pieces[i]);
+    const c = addBlob(q, slots[i]); c.mood = 'joy'; c.tag = String(i + 1);
+    burst(slots[i], G - baseR(q) * sc, 14, { colors: [c.color, '#fff'], speed: .35 });
+    sfx.pop(1 + i * .12); tween(c, { s: sc }, 320, E.back); res.push(c);
+    await wait(130);
+  }
+  hero.brow = 0;
+  popWord(`Her parça ${q}!`, mid, G - baseR(q) * 2 * sc - 70 * U, { size: 54, color: '#3ddc97' });
+  await wait(900);
+  res.forEach(c => { c.tag = null; c.mood = 'happy'; });
+  return res;
+}
+const SOLVE = { '+': solveAdd, '−': solveSub, '×': solveMul, '÷': solveDiv };
+
+/* ================== Akış ================== */
+async function countdown(n = 3) {
+  S.count = { n, p: 0, x: CX, y: vertical ? H * .3 : G - 330 * U, s: 0 };
+  await tween(S.count, { s: 1 }, 250, E.back);
+  for (let i = n; i >= 1; i--) { S.count.n = i; sfx.tick(); await anim(1000, t => S.count.p = t); }
+  sfx.go(); await tween(S.count, { s: 0 }, 200, E.in); S.count = null;
+}
+const PRAISE = ['SÜPER!', 'HARİKA!', 'MÜKEMMEL!', 'EFSANE!', 'BRAVO!'];
+async function reveal(ans) {
+  const h = S.hud; h.ans = ans; h.ansS = 0; sfx.win();
+  tween(h, { ansS: 1 }, 450, E.back);
+  burst(W / 2, (vertical ? H * .12 : 84), 30, { colors: ['#3ddc97', '#ffcf3f', '#fff'], shape: 'star', speed: .5 });
+  confetti();
+  popWord(PRAISE[Math.floor(Math.random() * PRAISE.length)], hero.x + 40 * U, G - 270 * U, { size: 58, color: '#3ddc97' });
+  await heroCheer();
+  await wait(1100);
+}
+async function clearStage() {
+  heroRunTo(HOME, undefined, true);
+  const bs = [...S.blobs];
+  await Promise.all(bs.map((b, i) => wait(i * 70).then(() => { sfx.pop(.7); return tween(b, { s: 0 }, 260, E.in); })));
+  S.blobs = []; S.pieces = [];
+  if (S.hud) { await tween(S.hud, { off: -300 }, 350, E.in); S.hud = null; }
+}
+function makeHud(expr, op, extra = {}) {
+  const info = OPINFO[op];
+  S.hud = Object.assign({ expr, ans: null, ansS: 0, idx: 1, total: 1, label: info.name, sub: info.power, color: info.color, off: -300, boss: false, step: '' }, extra);
+  return tween(S.hud, { off: 0 }, 450, E.back);
+}
+async function playQuestion(q, idx, total, custom = false) {
+  if (hero.x < 0) heroRunTo(HOME, 600, true);
+  await makeHud(`${q.a} ${q.op} ${q.b}`, q.op, { idx, total, custom });
+  let [a, b] = [q.a, q.b];
+  if (q.op === '×' && b > 6 && a <= 6) [a, b] = [b, a];   // kopya sayısı küçük olan
+  const A = await spawnBlob(a, CX - D);
+  const op = await spawnOp(q.op, CX);
+  const B = await spawnBlob(b, CX + D);
+  say(['Hmm...', 'Bu kolay!', 'Hazır mısın?'][idx % 3], 1100);
+  await countdown(3);
+  await SOLVE[q.op](A, op, B);
+  await reveal(compute(q.a, q.op, q.b));
+  await clearStage();
+}
+async function addOperand(A, sym, b) {
+  heroRunTo(HOME, 600, true);
+  A.mood = 'happy';
+  await blobHop(A, CX - D, 80 * U, 500);
+  const op = await spawnOp(sym, CX);
+  const B = await spawnBlob(b, CX + D);
+  await wait(300);
+  return { op, B };
+}
+async function playBoss(idx, total) {
+  S.flashColor = '#ff3b5c'; S.flash = .6; S.shake = 14 * U; sfx.boss();
+  popWord('BOSS SORUSU!', W / 2, H * .42, { size: 110, color: '#ff3b5c', hold: 1100, rot: -.06 });
+  await wait(1700);
+  const expr = '(6 + 2) × 3 ÷ 4';
+  await makeHud(expr, '+', { boss: true, label: 'KARIŞIK', sub: 'Önce parantez, sonra soldan sağa', color: '#ff3b5c', idx, total });
+  const A = await spawnBlob(6, CX - D), op = await spawnOp('+', CX), B = await spawnBlob(2, CX + D);
+  say('Bu zor görünüyor...', 1200);
+  await countdown(5);
+  S.hud.step = '1. adım: 6 + 2';
+  let [C] = await solveAdd(A, op, B);
+  S.hud.step = '2. adım: 8 × 3';
+  let o = await addOperand(C, '×', 3);
+  [C] = await solveMul(C, o.op, o.B);
+  S.hud.step = '3. adım: 24 ÷ 4';
+  o = await addOperand(C, '÷', 4);
+  await solveDiv(C, o.op, o.B);
+  S.hud.step = '';
+  await reveal(6);
+  await clearStage();
+}
+async function intro() {
+  S.title = { s: 0, a: 1 }; hero.x = -120; hero.tool = null;
+  sfx.swoosh();
+  await tween(S.title, { s: 1 }, 600, E.back);
+  sfx.swoosh();
+  await anim(850, t => { hero.x = -120 + (W / 2 + 120) * t; hero.hop = Math.sin(t * Math.PI) * 230 * U; hero.rot = t * Math.PI * 2; }, E.io);
+  hero.rot = 0; hero.hop = 0; hero.dir = 1; hero.sqy = .8; hero.sqx = 1.12; sfx.land(); tween(hero, { sqy: 1, sqx: 1 }, 320, E.back);
+  say('Merhaba! Ben Matematik Ninjası!', 1500);
+  await wait(1700);
+  const list = [['+', 'magnet', 'TOPLAMA', 'Mıknatıs', OPINFO['+'].color], ['−', 'hammer', 'ÇIKARMA', 'Çekiç', OPINFO['−'].color],
+  ['×', 'wand', 'ÇARPMA', 'Sihirli Değnek', OPINFO['×'].color], ['÷', 'sword', 'BÖLME', 'Kılıç', OPINFO['÷'].color]];
+  S.cards = list.map(([op, tool, name, label, color], i) => vertical
+    ? { op, tool, name, label, color, s: 0, x: W / 2 + (i % 2 ? 1 : -1) * 100 * U, y: H * .34 + Math.floor(i / 2) * 190 * U }
+    : { op, tool, name, label, color, s: 0, x: W / 2 + (i - 1.5) * 200, y: H * .45 });
+  for (const c of S.cards) {
+    await equip(c.tool);
+    tween(hero, { armA: 2.8 }, 200, E.out).then(() => tween(hero, { armA: .5 }, 300));
+    sfx.pop(1.2); await tween(c, { s: 1 }, 320, E.back);
+    await wait(380);
+  }
+  hero.tool = null;
+  await wait(500);
+  S.cards.forEach((c, i) => wait(i * 60).then(() => tween(c, { s: 0 }, 250, E.in)));
+  await wait(450);
+  say('Hadi soruları birlikte çözelim!', 1300);
+  await wait(1500);
+  await tween(S.title, { s: 0 }, 400, E.in);
+  S.title = null; S.cards = [];
+  await heroRunTo(HOME, 700, true);
+}
+const QUESTIONS = [
+  { a: 8, op: '+', b: 5 }, { a: 12, op: '÷', b: 3 }, { a: 15, op: '−', b: 6 }, { a: 4, op: '×', b: 3 },
+  { a: 7, op: '+', b: 9 }, { a: 20, op: '÷', b: 4 }, { a: 18, op: '−', b: 9 }, { a: 5, op: '×', b: 4 },
+];
+async function finale(total) {
+  hero.tool = null;
+  S.end = { s: 0, line1: `${total} soruyu birlikte çözdük!`, line2: 'Sen kaçını bildin? Yorumlara yaz!' };
+  sfx.win(); tween(S.end, { s: 1 }, 600, E.back);
+  heroRunTo(W / 2, 900, true);
+  for (let i = 0; i < 4; i++) { confetti(); await wait(450); }
+  await heroCheer(); await heroCheer();
+  say('Görüşürüz! Matematik eğlencelidir!', 2500);
+  await wait(3000);
+}
+async function playAll() {
+  await intro();
+  const total = QUESTIONS.length + 1;
+  for (let i = 0; i < QUESTIONS.length; i++) await playQuestion(QUESTIONS[i], i + 1, total);
+  await playBoss(total, total);
+  await finale(total);
+}
+async function playCustom(q) {
+  hero.x = -100;
+  await playQuestion(q, 1, 1, true);
+  say('Başka bir soru yaz!', 2500);
+}
+
+/* ================== Kontroller ================== */
+const btnStart = document.getElementById('btnStart'), btnPause = document.getElementById('btnPause'), btnRec = document.getElementById('btnRec');
+const msg = document.getElementById('msg');
+function setMsg(t, ok = false) { msg.textContent = t; msg.classList.toggle('ok', ok); }
+async function startRun(kind, payload) {
+  initAudio();
+  runToken++; const my = runToken;
+  resetScene(); started = true; running = true; paused = false; updatePauseBtn();
+  btnStart.textContent = '↺ Baştan';
+  if (kind === 'all') await playAll(); else await playCustom(payload);
+  if (my !== runToken) return;
+  running = false;
+  if (kind === 'all' && rec) setTimeout(() => rec && rec.stop(), 600);
+}
+function showIdle() { resetScene(); S.title = { s: 1, a: 1 }; S.hint = true; hero.x = W / 2; hero.lastX = hero.x; }
+function updatePauseBtn() { btnPause.textContent = paused ? '▶ Devam' : '⏸ Duraklat'; }
+function togglePause() {
+  if (!started) return;
+  paused = !paused; updatePauseBtn();
+  if (AC) paused ? AC.suspend() : AC.resume();
+}
+btnStart.onclick = () => startRun('all');
+btnPause.onclick = togglePause;
+cv.addEventListener('click', () => { if (!started) startRun('all'); else togglePause(); });
+document.getElementById('speed').onchange = e => speed = parseFloat(e.target.value);
+document.getElementById('btnOrient').onclick = e => {
+  vertical = !vertical; e.target.textContent = vertical ? '🖥 Yatay (16:9)' : '📱 Dikey (9:16)';
+  layout(); if (started) startRun('all'); else showIdle();
+};
+document.getElementById('btnMusic').onclick = e => { musicOn = !musicOn; e.target.textContent = musicOn ? '🎵 Müzik: Açık' : '🎵 Müzik: Kapalı'; };
+addEventListener('keydown', e => { if (e.code === 'Space' && e.target.tagName !== 'INPUT') { e.preventDefault(); togglePause(); } });
+
+document.getElementById('customForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const raw = document.getElementById('custom').value.trim();
+  const m = raw.match(/^(\d{1,3})\s*([+\-−–x×*\/÷:])\s*(\d{1,3})$/i);
+  if (!m) return setMsg('Soruyu "12 + 5", "9 - 4", "6 x 3" ya da "20 / 4" biçiminde yaz.');
+  const a = +m[1], b = +m[3];
+  const op = { '+': '+', '-': '−', '−': '−', '–': '−', 'x': '×', 'X': '×', '×': '×', '*': '×', '/': '÷', '÷': '÷', ':': '÷' }[m[2]];
+  if (a < 1 || b < 1) return setMsg('Sayılar en az 1 olmalı.');
+  if (op === '+' && (a > 60 || b > 60)) return setMsg('Toplamada sayılar en fazla 60 olabilir.');
+  if (op === '−' && (a > 99 || b >= a)) return setMsg('Çıkarmada ilk sayı ikinciden büyük ve en fazla 99 olmalı.');
+  if (op === '×' && (Math.min(a, b) > 6 || a * b > 144)) return setMsg('Çarpmada sayılardan biri en fazla 6, sonuç en fazla 144 olmalı.');
+  if (op === '÷' && (b < 2 || b > 6 || a > 120)) return setMsg('Bölmede bölen 2 ile 6 arasında, bölünen en fazla 120 olmalı.');
+  if (op === '÷' && a % b) return setMsg(`${a}, ${b}'e tam bölünmüyor. Kalansız bir bölme dene.`);
+  setMsg(`Ninja ${a} ${op} ${b} sorusunu çözüyor!`, true);
+  startRun('custom', { a, op, b });
+});
+
+/* video kaydı */
+let rec = null;
+btnRec.onclick = () => {
+  if (rec) { rec.stop(); return; }
+  initAudio();
+  if (!window.MediaRecorder || !cv.captureStream) return setMsg('Bu tarayıcı video kaydını desteklemiyor. Chrome ya da Edge dene.');
+  const stream = cv.captureStream(60);
+  if (recDest) recDest.stream.getAudioTracks().forEach(t => stream.addTrack(t));
+  const mime = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4'].find(t => MediaRecorder.isTypeSupported(t));
+  if (!mime) return setMsg('Bu tarayıcı video kaydını desteklemiyor.');
+  const chunks = [];
+  rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 8e6 });
+  rec.ondataavailable = e => e.data.size && chunks.push(e.data);
+  rec.onstop = () => {
+    const blob = new Blob(chunks, { type: mime });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = 'matematik-ninjasi.' + (mime.includes('mp4') ? 'mp4' : 'webm'); a.click();
+    rec = null; btnRec.textContent = '⏺ Video Kaydet'; btnRec.classList.remove('on');
+    setMsg('Video indirildi.', true);
+  };
+  rec.start(); btnRec.textContent = '⏹ Kaydı Bitir'; btnRec.classList.add('on');
+  setMsg('Kayıt başladı. Gösteri bitince video otomatik iner.', true);
+  startRun('all');
+};
+
+/* başlat */
+layout(); showIdle();
+(document.fonts ? document.fonts.load(F(40)).catch(() => { }) : Promise.resolve()).finally(() => requestAnimationFrame(t => { last = t; frame(t); }));
+</script>
+</body>
+</html>
