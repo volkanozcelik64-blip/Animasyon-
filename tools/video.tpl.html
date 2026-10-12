@@ -1,0 +1,727 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Nod ve Sayılar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&family=Noto+Sans:wght@500;800&display=swap">
+<style>
+/* Layout: siyah sahne (canvas) üstte, altında küçük kumanda paneli. "Animator vs Math" gibi tek, koyu görünüm bilinçli seçim. */
+:root{
+  --bg:#08080a;
+  --panel:#141418;
+  --line:#2c2c34;
+  --fg:#f2f2f2;
+  --muted:#9a9aa8;
+  --accent:#e04b4b;
+  --on-accent:#ffffff;
+  --font-ui:"Fredoka","Arial Rounded MT Bold",Arial,sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font-ui);padding-inline:16px;padding-block:16px 28px}
+.app{max-width:1280px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+.stage-wrap{width:min(100%,calc(80vh*16/9));margin:0 auto;max-width:100%}
+.stage-wrap.vertical{width:min(100%,calc(80vh*9/16))}
+canvas{display:block;width:100%;height:auto;border-radius:14px;border:1px solid var(--line);background:var(--bg);cursor:pointer;max-width:100%}
+.controls{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;align-items:center}
+button{font-family:var(--font-ui);font-size:1rem;font-weight:600;color:var(--fg);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 14px;cursor:pointer}
+button:hover{border-color:var(--fg)}
+button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.hint{color:var(--muted);font-size:.9rem;text-align:center;margin:0}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="stage-wrap" id="wrap"><canvas id="stage" aria-label="Nod ve Sayılar animasyonu"></canvas></div>
+  <div class="controls">
+    <button id="btnPlay" class="primary">▶ Oynat</button>
+    <button id="btnPause">⏸ Duraklat</button>
+    <button id="btnMusic">🎵 Müzik: Açık</button>
+  </div>
+  <p class="hint">Nod, büyüyen bir denklemin içinde dört işlemle boğuşuyor. Boşluk tuşu: duraklat/devam.</p>
+</div>
+<script>
+"use strict";
+const QS = new URLSearchParams(location.search);
+const RENDER = QS.has('render');
+let vertical = QS.get('v') === '1';
+const R = 1.5;
+let W = 1280, H = 720, U = 1;
+const G = 0;                                   // denklemin taban çizgisi = zemin
+let time = 0, vclock = 0, paused = false, started = false, running = false;
+const F = (sz, w = 700) => `${w} ${Math.round(sz)}px Fredoka, "Arial Rounded MT Bold", Arial, sans-serif`;
+const EQF = sz => `500 ${Math.round(sz)}px "Noto Sans", "DejaVu Sans", Arial, sans-serif`;
+const PAL = ['#ff5d73', '#ffa62b', '#2ec4b6', '#4cc9f0', '#9b5de5', '#f15bb5', '#00bb7f', '#ff8c42'];
+const rand = (a, b) => a + Math.random() * (b - a);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const INK = '#1d1f3b', SHADE = '#c9cce6', SCARF = '#e04b4b';
+const cv = document.getElementById('stage');
+const ctx = cv.getContext('2d');
+
+/*@@BASE@@*/
+
+/* ================== Ses: canlı çalınır ya da video için kaydedilip sonradan işlenir ================== */
+let AC = null, master = null, musicGain = null, noiseBuf = null, musicOn = true, OFF = false, T0 = 0;
+const events = [];
+function setupAudio(c) {
+  AC = c; master = AC.createGain(); master.gain.value = .55; master.connect(AC.destination);
+  musicGain = AC.createGain(); musicGain.gain.value = .12; musicGain.connect(master);
+  noiseBuf = AC.createBuffer(1, AC.sampleRate, AC.sampleRate);
+  const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+}
+function initAudio() {
+  if (RENDER) return;
+  if (AC) { if (AC.state === 'suspended') AC.resume(); return; }
+  try { setupAudio(new (window.AudioContext || window.webkitAudioContext)()); } catch (e) { AC = null; }
+}
+const now = () => OFF ? T0 : AC.currentTime;
+function tone(f, d, { type = 'sine', vol = .3, to = null, delay = 0, dest = null } = {}) {
+  if (!AC) return; const t0 = now() + Math.max(0, delay);
+  const o = AC.createOscillator(), g = AC.createGain(); o.type = type;
+  o.frequency.setValueAtTime(f, t0); if (to) o.frequency.exponentialRampToValueAtTime(to, t0 + d);
+  g.gain.setValueAtTime(.0001, t0); g.gain.exponentialRampToValueAtTime(vol, t0 + .01); g.gain.exponentialRampToValueAtTime(.0001, t0 + d);
+  o.connect(g); g.connect(dest || master); o.start(t0); o.stop(t0 + d + .05);
+}
+function noise(d, { vol = .3, f = 1000, to = null, q = 1, type = 'bandpass', delay = 0, dest = null } = {}) {
+  if (!AC) return; const t0 = now() + Math.max(0, delay);
+  const s = AC.createBufferSource(); s.buffer = noiseBuf;
+  const fl = AC.createBiquadFilter(); fl.type = type; fl.Q.value = q; fl.frequency.setValueAtTime(f, t0);
+  if (to) fl.frequency.exponentialRampToValueAtTime(to, t0 + d);
+  const g = AC.createGain(); g.gain.setValueAtTime(.0001, t0); g.gain.exponentialRampToValueAtTime(vol, t0 + .01); g.gain.exponentialRampToValueAtTime(.0001, t0 + d);
+  s.connect(fl); fl.connect(g); g.connect(dest || master); s.start(t0); s.stop(t0 + d + .05);
+}
+const semi = (b, s) => b * Math.pow(2, s / 12);
+const SFX = {
+  pop: (p = 1) => tone(420 * p, .14, { to: 900 * p, vol: .25 }),
+  tick: () => tone(1100, .05, { type: 'square', vol: .06 }),
+  go: () => { tone(660, .12, { type: 'triangle', vol: .2 }); tone(990, .3, { type: 'triangle', vol: .2, delay: .1 }); },
+  swoosh: () => noise(.22, { vol: .55, f: 500, to: 5000, q: .8 }),
+  boom: () => { tone(150, .6, { vol: .7, to: 40 }); noise(.45, { vol: .35, f: 500, to: 80, type: 'lowpass' }); },
+  clang: () => { tone(1760, .6, { type: 'triangle', vol: .12, to: 1700 }); tone(2637, .4, { vol: .07 }); },
+  zap: () => { tone(1300, .25, { type: 'sawtooth', vol: .07, to: 200 }); noise(.2, { vol: .2, f: 3000 }); },
+  magic: () => [0, 4, 7, 12, 16].forEach((s, i) => tone(semi(523, s), .25, { type: 'triangle', vol: .12, delay: i * .06 })),
+  whistle: () => tone(1400, .9, { vol: .1, to: 300 }),
+  shrink: () => tone(600, .7, { type: 'square', vol: .045, to: 180 }),
+  hum: () => tone(90, 1.1, { type: 'sawtooth', vol: .05, to: 150 }),
+  win: () => [0, 4, 7, 12].forEach((s, i) => tone(semi(523, s), .4, { type: 'triangle', vol: .16, delay: i * .08 })),
+  land: () => noise(.12, { vol: .3, f: 220, type: 'lowpass' }),
+  ding: (p = 1) => { tone(880 * p, .3, { type: 'triangle', vol: .14 }); tone(1320 * p, .35, { type: 'sine', vol: .08, delay: .05 }); },
+  roll: () => noise(1.6, { vol: .12, f: 300, to: 120, type: 'lowpass' }),
+};
+const sfx = {};
+for (const k in SFX) sfx[k] = (...a) => { if (RENDER) events.push({ t: vclock / 1000, k, a }); else SFX[k](...a); };
+const BPM = 104, ROOTS = [57, 53, 55, 52];
+const mhz = m => 440 * Math.pow(2, (m - 69) / 12);
+function musicStep(step, t) {
+  const delay = t - now(), i = step % 8, r = ROOTS[Math.floor(step / 8) % 4];
+  if (i % 4 === 0) tone(110, .18, { vol: .45, to: 40, delay, dest: musicGain });
+  if (i % 2 === 1) noise(.04, { vol: .1, f: 8000, type: 'highpass', delay, dest: musicGain });
+  if (i === 0 || i === 3 || i === 6) tone(mhz(r - 12), .22, { type: 'triangle', vol: .32, delay, dest: musicGain });
+  if (i % 2 === 0) tone(mhz(r + [0, 3, 7, 10][(step / 2) % 4 | 0] + 12), .16, { type: 'square', vol: .045, delay, dest: musicGain });
+}
+let nextNoteT = 0, mstep = 0;
+setInterval(() => {
+  if (RENDER || !AC || !musicOn || paused || !running) { if (AC && !RENDER) nextNoteT = AC.currentTime + .05; return; }
+  const spb = 60 / BPM / 2;
+  if (nextNoteT < AC.currentTime) nextNoteT = AC.currentTime + .05;
+  while (nextNoteT < AC.currentTime + .2) { musicStep(mstep++, nextNoteT); nextNoteT += spb; }
+}, 50);
+
+/* ================== Sahne durumu ================== */
+let S, hero;
+function makeHero() { return { arm2: .35, wink: 0, mouth: 0, ts: 1, ride: false, dustT: 0, x: -900, hop: 0, dir: 1, armA: .5, tool: null, walk: 0, phase: 0, s: .5, rot: 0, sqx: 1, sqy: 1, lastX: -900, bubble: null, ghosts: [], dash: false, glint: 0, brow: 0, happy: 0 }; }
+function resetScene() {
+  jobs.length = 0;
+  S = { toks: [], pieces: [], texts: [], parts: [], slashes: [], bolts: [], rings: [], mstars: [], rays: [], field: null, shake: 0, flash: 0, flashColor: '#fff',
+    cam: { x: 0, y: -80, z: 1 }, hitstop: 0, slow: 1, invert: 0, lines: null, follow: null, rideOn: null, shadow: null, cut: null, card: null };
+  hero = makeHero();
+}
+
+/*@@FX@@*/
+/*@@HEROMOVE@@*/
+/*@@HERODRAW@@*/
+/*@@DRAWFX@@*/
+
+/* ================== Sonsuz dünya için kamera ve metin ================== */
+function applyCam() { const c = S.cam; ctx.translate(W / 2, H / 2); ctx.scale(c.z, c.z); ctx.translate(-c.x, -c.y); }
+function camTo(x, y, z, dur = 400, ease = E.io) { return tween(S.cam, { x, y, z }, dur, ease); }
+function camPunch(x, y, dz = 1.15) { const b = Object.assign({}, S.cam); camTo(x, y, b.z * dz, 90, E.out).then(() => camTo(b.x, b.y, b.z, 600)); }
+function drawText(t) {
+  if (t.s <= .01 || t.alpha <= .01) return;
+  ctx.save(); ctx.globalAlpha *= t.alpha; ctx.font = F(t.size);
+  const w = ctx.measureText(t.text).width;
+  ctx.translate(t.x, t.y); ctx.rotate(t.rot); ctx.scale(t.s, t.s);
+  if (t.burst) {
+    const bw = w * .62 + t.size * .5, bh = t.size * 1.05, n = 18;
+    ctx.beginPath();
+    for (let i = 0; i < n * 2; i++) { const a = i / (n * 2) * Math.PI * 2, k = i % 2 ? .78 : 1.08 + .1 * Math.sin(i * 7.3); ctx.lineTo(Math.cos(a) * bw * k, Math.sin(a) * bh * k); }
+    ctx.closePath(); ctx.fillStyle = t.burst; ctx.fill(); ctx.lineWidth = t.size * .09; ctx.strokeStyle = t.stroke; ctx.stroke();
+  }
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+  ctx.lineWidth = t.size * .18; ctx.strokeStyle = t.stroke; ctx.strokeText(t.text, 0, 0);
+  ctx.fillStyle = t.color; ctx.fillText(t.text, 0, 0);
+  ctx.restore();
+}
+function drawBubble() {
+  const b = hero.bubble; if (!b || b.a <= .01) return;
+  ctx.save(); ctx.globalAlpha = b.a; ctx.font = `700 22px "DejaVu Sans", Verdana, Arial, sans-serif`;
+  const tw = ctx.measureText(b.text).width, bw = tw + 26, bh = 40;
+  const bx = hero.x - bw / 2, by = G - hero.hop - 290 * hero.s - bh;
+  ctx.fillStyle = '#fff'; rr(bx, by, bw, bh, 8); ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.stroke();
+  ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(b.text, bx + bw / 2, by + bh / 2 + 1);
+  ctx.restore();
+}
+
+/* ================== Denklem parçaları (token) ================== */
+const FS = 110;
+function tw(t) { ctx.font = EQF(FS * (t.size || 1)); return ctx.measureText(t.txt).width; }
+function tok(txt, x, o = {}) { const t = Object.assign({ txt, x, y: 0, s: 1, sx: 1, sy: 1, rot: 0, alpha: 1, glow: 0, color: '#f2f2f2', size: 1, tag: null, follow: false }, o); S.toks.push(t); return t; }
+function untok(t) { S.toks = S.toks.filter(q => q !== t); }
+function centers(eq, opt) {
+  const g = FS * .07, ws = eq.map(tw); let acc = 0;
+  const c = ws.map(w => { const v = acc + w / 2; acc += w + g; return v; });
+  const off = opt.mid !== undefined ? opt.mid - (acc - g) / 2 : opt.x - c[opt.anchor];
+  return c.map(v => v + off);
+}
+function relayout(eq, opt, dur = 400, ease = E.io) { const c = centers(eq, opt); return Promise.all(eq.map((t, i) => dur ? tween(t, { x: c[i] }, dur, ease) : (t.x = c[i], null))); }
+async function popTok(txt, x, o = {}) {
+  const t = tok(txt, x, Object.assign({ s: 0 }, o)); sfx.pop(o.pitch || 1);
+  burst(x, G - FS * .36 * t.size, 10, { speed: .3, colors: ['#fff', '#ffcf3f'] });
+  await tween(t, { s: 1 }, 320, E.back); return t;
+}
+function squash(t) { t.sx = 1.25; t.sy = .75; return tween(t, { sx: 1, sy: 1 }, 450, E.elastic); }
+async function dropTok(t, dur = 450) { await tween(t, { y: 0 }, dur, E.in); sfx.land(); puff(t.x, G, 4); S.shake = 5; squash(t); }
+function setTxt(t, txt) { t.txt = txt; t.s = 1.3; t.glow = 1; return tween(t, { s: 1, glow: 0 }, 420, E.back); }
+function fallAway(t, delay = 0) {
+  return wait(delay).then(() => { const vx = rand(-.25, .25), r = rand(-3, 3), x0 = t.x, y0 = t.y; return anim(1000, k => { t.y = y0 + 1000 * k * k - Math.sin(Math.PI * k) * 60; t.x = x0 + vx * 900 * k; t.rot = r * k; }); }).then(() => untok(t));
+}
+function flyTo(t, x, h = 120, dur = 450) {
+  const x0 = t.x, y0 = t.y, s0 = t.s;
+  return anim(dur, k => { t.x = x0 + (x - x0) * k; t.y = y0 * (1 - k) - Math.sin(Math.PI * k) * h; t.s = s0 + (1 - s0) * k; }, E.io).then(() => { t.y = 0; sfx.land(); squash(t); });
+}
+const tokTarget = t => ({ get x() { return t.x; }, get y() { return G - FS * .36 * t.size; }, r: FS * .45 });
+function drawTok(t) {
+  if (t.s <= .001 || t.alpha <= 0) return;
+  const fs = FS * t.size;
+  ctx.save(); ctx.globalAlpha *= t.alpha;
+  ctx.translate(t.x, G + t.y - fs * .36); ctx.rotate(t.rot); ctx.scale(t.s * t.sx, t.s * t.sy); ctx.translate(0, fs * .36);
+  tokBody(t); ctx.restore();
+  if (t.tag) {
+    const ty = G + t.y - fs * .78 * t.s - 34;
+    ctx.save(); ctx.font = F(24); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = SCARF; circle(t.x, ty, 17); ctx.fill(); ctx.fillStyle = '#fff'; ctx.fillText(t.tag, t.x, ty + 1); ctx.restore();
+  }
+}
+function tokBody(t) {
+  const fs = FS * t.size;
+  ctx.font = EQF(fs); ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+  if (t.glow > 0) { ctx.shadowColor = '#ffe39a'; ctx.shadowBlur = 45 * t.glow; }
+  ctx.fillStyle = t.color; ctx.fillText(t.txt, 0, 0); ctx.shadowBlur = 0;
+}
+function drawTokPiece(p) {
+  const t = p.t, fs = FS * t.size;
+  ctx.save(); ctx.translate(t.x + p.dx, G + t.y - fs * .36 + p.dy); ctx.rotate(p.rot); ctx.rotate(p.ang);
+  ctx.beginPath(); ctx.rect(p.x0, -fs * 2, p.x1 - p.x0, fs * 4); ctx.clip();
+  ctx.save(); ctx.rotate(-p.ang); ctx.translate(0, fs * .36); tokBody(t); ctx.restore();
+  ctx.strokeStyle = SCARF; ctx.lineWidth = 3;
+  for (const x of [p.x0, p.x1]) if (Math.abs(x) < fs) { ctx.beginPath(); ctx.moveTo(x, -fs * .7); ctx.lineTo(x, fs * .7); ctx.stroke(); }
+  ctx.restore();
+}
+
+/* ================== Döngü ================== */
+function update(dt) {
+  runJobs(dt);
+  const h = hero;
+  if (S.rideOn) h.x = S.rideOn.x;
+  const vx = (h.x - h.lastX) / Math.max(dt, 1); h.lastX = h.x;
+  h.walk += ((Math.abs(vx) > .03 && (h.hop < 2 || h.ride) ? 1 : 0) - h.walk) * Math.min(1, dt * .015);
+  h.phase += Math.min(Math.abs(vx), 1.2) * dt * .03;
+  if (h.dash) h.ghosts.push({ x: h.x, hop: h.hop, armA: h.armA, a: .6 });
+  h.ghosts.forEach(g => g.a -= dt * .003); h.ghosts = h.ghosts.filter(g => g.a > 0);
+  h.glint = Math.max(0, h.glint - dt * .0015);
+  h.dustT -= dt;
+  if (h.walk > .5 && h.hop < 2 && h.dustT < 0) { h.dustT = 110; puff(h.x - h.dir * 12, G, 2, -h.dir); }
+  if (S.follow) S.cam.x += (h.x + S.follow.dx - S.cam.x) * Math.min(1, dt * .005);
+  for (const t of S.toks) if (t.follow) { const hp = heroHand(6); t.x = hp.x; t.y = hp.y - G + FS * .2; }
+  if (S.field && Math.random() < .5) for (const b of S.field.targets) {
+    const a = rand(0, Math.PI * 2); S.parts.push({ x: b.x + Math.cos(a) * b.r, y: b.y + Math.sin(a) * b.r, vx: Math.cos(a) * .25, vy: Math.sin(a) * .25, g: 0, life: 220, age: 0, size: 3, color: Math.random() < .5 ? '#4cc9f0' : '#fff', shape: 'spark', rot: 0, vr: 0 });
+  }
+  for (const p of S.parts) {
+    p.age += dt; p.vy += p.g * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt;
+    if (p.bounce && p.y > G && p.vy > 0) { p.y = G; p.vy *= -.35; p.vx *= .6; }
+  }
+  S.parts = S.parts.filter(p => p.age < p.life);
+  [S.slashes, S.bolts, S.rings].forEach(arr => arr.forEach(s => s.age += dt));
+  S.slashes = S.slashes.filter(s => s.age < s.life); S.bolts = S.bolts.filter(s => s.age < s.life); S.rings = S.rings.filter(s => s.age < s.life);
+  S.shake *= Math.pow(.88, dt / 16); S.flash = Math.max(0, S.flash - dt * .0025);
+}
+function draw() {
+  ctx.setTransform(R, 0, 0, R, 0, 0);
+  const bgG = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.max(W, H) * .7);
+  bgG.addColorStop(0, '#141418'); bgG.addColorStop(1, '#050506');
+  ctx.fillStyle = bgG; ctx.fillRect(0, 0, W, H);
+  ctx.save();
+  if (S.shake > .3) ctx.translate((Math.random() - .5) * S.shake, (Math.random() - .5) * S.shake);
+  applyCam();
+  if (S.shadow) { ctx.fillStyle = `rgba(255,255,255,${S.shadow.a * .25})`; ctx.beginPath(); ctx.ellipse(S.shadow.x, G + 4, S.shadow.r, S.shadow.r * .15, 0, 0, 7); ctx.fill(); }
+  drawRays();
+  S.pieces.forEach(drawTokPiece);
+  S.toks.forEach(drawTok);
+  drawField();
+  hero.ghosts.forEach(g => drawHero(Object.assign({}, hero, g), g.a * .5, true));
+  drawHero(hero);
+  drawBubble();
+  drawFX();
+  S.texts.forEach(drawText);
+  ctx.restore();
+  drawLines();
+  if (S.invert > 0) { ctx.globalCompositeOperation = 'difference'; ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H); ctx.globalCompositeOperation = 'source-over'; }
+  if (S.flash > 0) { ctx.globalAlpha = Math.min(1, S.flash); ctx.fillStyle = S.flashColor; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; }
+  if (S.cut) {
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+    ctx.font = EQF(vertical ? 110 : 150); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#f2f2f2';
+    ctx.globalAlpha = S.cut.a; ctx.fillText(S.cut.txt, W / 2, H / 2); ctx.globalAlpha = 1;
+  }
+  if (S.card && S.card.s > .01) {
+    ctx.save(); ctx.translate(W / 2, vertical ? H * .2 : H * .2); ctx.scale(S.card.s, S.card.s);
+    const size = vertical ? 64 : 80, lines = vertical ? ['NOD İLE', 'MATEMATİK'] : ['NOD İLE MATEMATİK'];
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round'; ctx.font = F(size);
+    lines.forEach((ln, i) => {
+      const y = i * size * 1.05;
+      ctx.lineWidth = size * .2; ctx.strokeStyle = '#000'; ctx.strokeText(ln, 0, y);
+      const g = ctx.createLinearGradient(0, y - size / 2, 0, y + size / 2); g.addColorStop(0, '#fff3a6'); g.addColorStop(1, '#ff9f1c');
+      ctx.fillStyle = g; ctx.fillText(ln, 0, y);
+    });
+    ctx.restore();
+  }
+  if (!started && !RENDER) {
+    ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(0, 0, W, H);
+    ctx.font = F(vertical ? 46 : 54); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff';
+    ctx.fillText('▶  Oynatmak için tıkla', W / 2, H / 2);
+  }
+  if (paused && started) { ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.fillRect(0, 0, W, H); ctx.font = F(56); ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.fillText('⏸', W / 2, H / 2); }
+}
+function stepFrame(real) {
+  let dt = real;
+  if (S.hitstop > 0) { S.hitstop -= real; dt = 0; }
+  if (S.invert > 0) S.invert -= real;
+  dt *= S.slow; time += dt; vclock += real; update(dt);
+}
+
+/* ================== Hikâye ================== */
+function camFit(dur = 600, zmax = Z, pad = 130) {
+  let x0 = Infinity, x1 = -Infinity;
+  for (const t of S.toks) { if (t.alpha < .1 || t.s < .1 || t.y > 200 || t.y < -400) continue; const w = tw(t) / 2; x0 = Math.min(x0, t.x - w); x1 = Math.max(x1, t.x + w); }
+  x0 = Math.min(x0, hero.x - 50); x1 = Math.max(x1, hero.x + 50);
+  return camTo((x0 + x1) / 2, CY, Math.min(zmax, W / (x1 - x0 + pad * 2)), dur);
+}
+const CY = -80;
+let Z = 1.5;
+async function story() {
+  Z = vertical ? 1.2 : 1.55;
+  Object.assign(S.cam, { x: 0, y: CY, z: Z });
+  hero.x = hero.lastX = -900; hero.dir = 1;
+  await wait(500);
+
+  /* ---- 1) Bir sayı, sonra 1 + 1 = 2 ---- */
+  const a1 = await popTok('1', 0);
+  await wait(500);
+  heroRunTo(-150, 1500);
+  await wait(1550); hero.dir = 1;
+  say('?', 700); await wait(900);
+  await tween(hero, { armA: 1.55 }, 160, E.out); sfx.pop(1.8);
+  a1.rot = .3; tween(a1, { rot: 0 }, 700, E.elastic);
+  await tween(hero, { armA: .5 }, 250);
+  await wait(300);
+  const p1 = tok('+', 0, { y: -700 }), b1 = tok('1', 0, { y: -700 });
+  let eq = [a1, p1, b1];
+  let c = centers(eq, { mid: 80 }); p1.x = c[1]; b1.x = c[2];
+  tween(a1, { x: c[0] }, 250);
+  heroJumpTo(c[0] - 110, 0, 450, 70).then(() => hero.dir = 1);
+  await dropTok(p1, 420); await dropTok(b1, 380);
+  await wait(350);
+  const e1 = tok('=', 0, { alpha: 0 }), r1 = tok('2', 0, { s: 0 });
+  eq = [a1, p1, b1, e1, r1]; c = centers(eq, { mid: 80 });
+  e1.x = c[3] + 260; tween(e1, { alpha: 1 }, 200); sfx.swoosh();
+  await relayout(eq.slice(0, 4), { anchor: 0, x: c[0] }, 380, E.out);
+  r1.x = c[4]; sfx.go(); r1.glow = 1;
+  await tween(r1, { s: 1, glow: 0 }, 500, E.back);
+  hero.happy = 1; await wait(500); hero.happy = 0;
+  await wait(400);
+
+  /* ---- 2) +1, +1, +1 ... sonuç sayarak büyür ---- */
+  const EX = e1.x;
+  camTo(EX, CY, Z, 600);
+  await heroJumpTo(r1.x + 130, 0, 520, 110); hero.dir = -1;
+  let n = 2;
+  while (n < 10) {
+    const f = Math.max(.35, 1 - (n - 2) * .11);
+    tween(hero, { armA: 2.6 }, 150 * f, E.out);
+    await wait(150 * f);
+    const hp = heroHand(10);
+    const np = tok('+', hp.x, { y: hp.y - G + FS * .3, s: .4 }), n1 = tok('1', hp.x, { y: hp.y - G + FS * .3, s: .4 });
+    sfx.pop(1 + n * .07);
+    const neq = [...eq.slice(0, eq.length - 2), np, n1, e1, r1];
+    const cc = centers(neq, { anchor: neq.length - 2, x: EX });
+    neq.forEach((t, i) => { if (t !== np && t !== n1) tween(t, { x: cc[i] }, 380 * f); });
+    tween(hero, { armA: .5 }, 250 * f);
+    await Promise.all([np, n1].map(t => {
+      const x0 = t.x, y0 = t.y, tx = cc[neq.indexOf(t)];
+      return anim(380 * f, k => { t.x = x0 + (tx - x0) * k; t.y = y0 * (1 - k) - Math.sin(Math.PI * k) * 90; t.s = .4 + .6 * k; }, E.io);
+    }));
+    np.y = n1.y = 0;
+    n++; eq = neq;
+    setTxt(r1, String(n)); sfx.ding(1 + (n - 3) * .06);
+    relayout(eq, { anchor: eq.length - 2, x: EX }, 200);
+    await wait(170 * f);
+  }
+  await wait(400);
+  say('...', 900); await wait(1000);
+  const span = r1.x - eq[0].x + 500;
+  await camTo((eq[0].x + r1.x) / 2, CY, Math.min(Z, W / span), 1300);
+  await wait(1400);
+
+  /* ---- 3) Mıknatıs: 1+1 çiftleri 2 olur ---- */
+  await equip('magnet');
+  const L0 = eq[0].x;
+  camTo(L0 + 160, CY, Z * .95, 900);
+  await heroJumpTo(L0 - 110, 0, 900, 240); hero.dir = 1;
+  async function mergePair(i, slow) {
+    const A = eq[i], P = eq[i + 1], B = eq[i + 2], mx = P.x;
+    if (slow) {
+      await heroJumpTo(mx, 180, 520, 60); hero.dir = 1;
+      tween(hero, { armA: .02 }, 200);
+      S.field = { targets: [tokTarget(A), tokTarget(B)] }; sfx.hum(); A.rot = .1; B.rot = -.1;
+      await wait(600);
+    }
+    tween(P, { s: 0 }, slow ? 450 : 200);
+    await Promise.all([tween(A, { x: mx }, slow ? 450 : 200, E.in), tween(B, { x: mx }, slow ? 450 : 200, E.in)]);
+    S.field = null;
+    untok(A); untok(B); untok(P);
+    const T2 = tok('2', mx, { s: .6, glow: 1 }); tween(T2, { s: 1, glow: 0 }, 650, E.elastic);
+    ring(mx, G - FS * .36, slow ? 170 : 110); burst(mx, G - FS * .36, 16, { speed: .4, colors: ['#fff', '#4cc9f0', '#ff5d73'] });
+    if (slow) { sfx.boom(); S.shake = 12; hitStop(90); } else { sfx.pop(.7); S.shake = 4; }
+    return T2;
+  }
+  const twos = [await mergePair(0, true)];
+  tween(hero, { armA: .5 }, 300);
+  await heroJumpTo(L0 - 120, 0, 450, 50); hero.dir = 1;
+  say('Hepsi!', 800);
+  camFit(700);
+  await wait(500);
+  for (const i of [4, 8, 12, 16]) { twos.push(await mergePair(i, false)); await wait(110); }
+  eq = [twos[0], eq[3], twos[1], eq[7], twos[2], eq[11], twos[3], eq[15], twos[4], e1, r1];
+  await relayout(eq, { anchor: 9, x: EX }, 550);
+  await heroRunTo(eq[0].x - 110, 600, true);
+  camFit(500);
+  await wait(400);
+
+  /* ---- 4) Sihirli değnek: 2+2+2+2+2 → 5 × 2, sonra 5 × 20 = 100 ---- */
+  await equip('wand');
+  for (let i = 0; i < 5; i++) { twos[i].tag = String(i + 1); sfx.pop(1 + i * .12); await wait(230); }
+  say('5 tane 2!', 1100); await wait(1200);
+  tween(hero, { armA: 2.0 }, 200); await wait(220);
+  let tip = heroHand(70);
+  bolt(tip.x, tip.y, twos[2].x, G - FS * .4); sfx.zap(); S.flash = .25; S.flashColor = '#c77dff';
+  [eq[1], eq[3], eq[5], eq[7]].forEach(t => tween(t, { s: 0, rot: 3 }, 350).then(() => untok(t)));
+  const two = twos[4];
+  twos.slice(0, 4).forEach(t => { t.tag = null; tween(t, { x: two.x, s: 0, rot: -2 }, 450, E.in).then(() => untok(t)); });
+  two.tag = null;
+  sfx.magic();
+  const five = tok('5', two.x, { y: -FS * 1.3, s: 0 }); tween(five, { s: 1 }, 300, E.back);
+  const times = tok('×', two.x, { s: 0 });
+  await wait(480);
+  eq = [five, times, two, e1, r1];
+  const c4 = centers(eq, { anchor: 3, x: EX }); times.x = c4[1];
+  tween(times, { s: 1 }, 300, E.back);
+  tween(hero, { armA: .5 }, 250);
+  await Promise.all([tween(five, { x: c4[0] }, 350), dropTok(five, 350), relayout([two, e1, r1], { anchor: 1, x: EX }, 350)]);
+  await heroRunTo(five.x - 120, 600, true);
+  camFit(500);
+  await wait(700);
+  tween(hero, { armA: 2.2 }, 200); await wait(220);
+  tip = heroHand(70);
+  const zero = tok('0', tip.x, { y: tip.y - G + FS * .3, s: .3 }); sfx.magic();
+  burst(tip.x, tip.y, 14, { shape: 'star', colors: ['#ffe066', '#fff'] });
+  const zx = two.x + tw(two) * .5 + 30;
+  await anim(450, k => { zero.x = tip.x + (zx - tip.x) * k; zero.y = (tip.y - G + FS * .3) * (1 - k) - Math.sin(Math.PI * k) * 90; zero.s = .3 + .7 * k; });
+  untok(zero); setTxt(two, '20'); sfx.pop(.8);
+  await relayout(eq, { anchor: 3, x: EX }, 250);
+  tween(hero, { armA: .5 }, 200);
+  let last = 10;
+  await anim(1100, k => { const v = Math.round(10 + 90 * k); if (v !== last) { if (v % 5 === 0) sfx.tick(); last = v; r1.txt = String(v); } }, E.in);
+  await relayout(eq, { anchor: 3, x: EX }, 150);
+  impact(r1.x, G - FS * .36, { ring: 220, shake: 14, flash: .25 }); hitStop(90);
+  raysAt(r1.x, G - FS * .36, '#ffd84d', 1200, 230); r1.glow = 1; tween(r1, { glow: 0 }, 1600);
+  camPunch(r1.x, CY, 1.12);
+  hero.happy = 1; say('Vay!', 900); await wait(1400); hero.happy = 0;
+
+  /* ---- 5) Çekiç: 100 − 1 − 1 − 98 = 0 ---- */
+  [five, times, two, e1].forEach((t, i) => fallAway(t, i * 90)); sfx.whistle();
+  await wait(600);
+  const H100 = r1;
+  tween(H100, { x: 0 }, 600); camTo(60, CY, Z * .95, 600);
+  heroRunTo(-230, 600, true);
+  await wait(650);
+  await equip('hammer');
+  async function slam(big) {
+    const T = { x: H100.x + tw(H100) * .22, y: G - FS * .8 };
+    const k = hero.s, fa = 1.25, reach = (ARM + 82 * TOOLS * hero.ts) * k;
+    const hx = T.x - SHX * k - Math.sin(fa) * reach, hopT = Math.max(0, G - SHY * k + Math.cos(fa) * reach - T.y);
+    hero.brow = 1;
+    await heroRunTo(hx - 40, 380, true);
+    await Promise.all([heroJumpTo(hx, hopT + 90, 360, 40), tween(hero, { armA: 3.6 }, 360, E.out)]); hero.dir = 1;
+    await wait(big ? 450 : 120);
+    sfx.swoosh();
+    await Promise.all([tween(hero, { armA: fa }, 100, E.in), tween(hero, { hop: hopT }, 100, E.in)]);
+    impact(T.x, T.y, { colors: ['#fff', '#aab3c5', '#ffcf3f'], ring: big ? 320 : 150, flash: big ? .35 : .15, shake: big ? 26 : 12 });
+    burst(T.x, T.y, big ? 30 : 14, { shape: 'rock', colors: ['#ddd', '#999'], speed: .5, up: .4, bounce: true, life: 1300, size: 6 });
+    hitStop(big ? 170 : 90, big ? 90 : 0); squash(H100);
+    if (big) speedLines(500);
+    return T;
+  }
+  async function chip(eqNew, newToks, resTxt, T) {
+    newToks.forEach(t => { t.x = T.x; t.y = T.y - G; t.s = .5; });
+    const cs = centers(eqNew, { anchor: 0, x: H100.x });
+    await Promise.all(newToks.map((t, i) => wait(i * 70).then(() => flyTo(t, cs[eqNew.indexOf(t)], 130, 480))));
+    relayout(eqNew, { anchor: 0, x: H100.x }, 250);
+  }
+  let T = await slam(false);
+  const m1 = tok('−', 0), o1 = tok('1', 0), eqS = tok('=', 0, { s: 0 }), res = tok('99', 0, { s: 0 });
+  eq = [H100, m1, o1, eqS, res];
+  heroJumpTo(hero.x - 60, 0, 350, 30);
+  await chip(eq, [m1, o1], null, T);
+  c = centers(eq, { anchor: 0, x: H100.x }); eqS.x = c[3]; res.x = c[4];
+  tween(eqS, { s: 1 }, 250, E.back); await wait(120); sfx.go(); await tween(res, { s: 1 }, 300, E.back);
+  camFit(500, Z * .9);
+  await wait(600);
+  T = await slam(false);
+  const m2 = tok('−', 0), o2 = tok('1', 0);
+  eq = [H100, m1, o1, m2, o2, eqS, res];
+  heroJumpTo(hero.x - 60, 0, 350, 30);
+  await chip(eq, [m2, o2], null, T);
+  setTxt(res, '98'); sfx.ding(.9);
+  await relayout(eq, { anchor: 0, x: H100.x }, 200);
+  camFit(500, Z * .9);
+  await wait(500);
+  hero.brow = 1; hero.mouth = 1; say('Grrr!', 800); await wait(700); hero.mouth = 0;
+  sfx.pop(.5); await tween(hero, { ts: 2.3 }, 400, E.back);
+  T = await slam(true);
+  const m3 = tok('−', 0), o3 = tok('98', 0);
+  eq = [H100, m1, o1, m2, o2, m3, o3, eqS, res];
+  heroJumpTo(hero.x - 80, 0, 400, 40); tween(hero, { ts: 1 }, 400);
+  await chip(eq, [m3, o3], null, T);
+  setTxt(res, '0'); sfx.boom();
+  await relayout(eq, { anchor: 0, x: H100.x }, 200);
+  camFit(600, Z * .85);
+  hero.brow = 0;
+  { const hp = heroHand(30); burst(hp.x, hp.y, 10, { shape: 'star', speed: .25, colors: ['#fff', '#ffcf3f'] }); hero.tool = null; }
+  await wait(1100);
+
+  /* ---- 6) Sıfır yuvarlanıyor ---- */
+  const Z0 = res;
+  eq.filter(t => t !== Z0).forEach((t, i) => fallAway(t, i * 60)); sfx.whistle();
+  await wait(500);
+  heroRunTo(-260, 600, true);
+  await Promise.all([tween(Z0, { x: 150 }, 600), camTo(-40, CY, Z, 600)]);
+  await anim(600, k => Z0.rot = Math.sin(k * Math.PI * 4) * .2);
+  say('?', 600); await wait(500);
+  const r0 = tw(Z0) * .5;
+  const rollTo = (x, dur, ease = E.io) => { const x0 = Z0.x, rot0 = Z0.rot; return anim(dur, k => { Z0.x = x0 + (x - x0) * k; Z0.rot = rot0 + (Z0.x - x0) / r0; }, ease); };
+  hero.mouth = 1; say('!', 500); sfx.roll();
+  S.follow = { dx: 120 };
+  rollTo(-480, 1300, E.in);
+  await heroRunTo(-640, 700); hero.dir = 1;
+  const top = FS * .76;
+  const hx0 = hero.x;
+  await anim(420, k => { hero.x = hx0 + (Z0.x - hx0) * k; hero.hop = top * k + Math.sin(Math.PI * k) * 120; });
+  hero.ride = true; S.rideOn = Z0; hero.hop = top; hero.mouth = 0; hero.happy = 1;
+  sfx.land(); say('Yuhuu!', 1200); sfx.roll();
+  await rollTo(600, 2300, E.io);
+  hero.ride = false; S.rideOn = null; hero.happy = 0;
+  heroJumpTo(Z0.x - 170, 0, 520, 130).then(() => hero.dir = 1);
+  rollTo(2600, 1600, E.in).then(() => untok(Z0));
+  await wait(700);
+  S.follow = null;
+  say('Hoşça kal, sıfır!', 1100); await wave(1100, 2.8);
+
+  /* ---- 7) Kılıç: 12 ÷ 3 = 4, sonra 4 ÷ 2 = 2, 2 ÷ 2 = 1 ---- */
+  const bx = hero.x + 330;
+  camTo(hero.x + 180, CY, Z, 600);
+  S.shadow = { x: bx, a: 0, r: 10 }; tween(S.shadow, { a: 1, r: 120 }, 1000, E.in); sfx.whistle();
+  await wait(300); say('?', 600);
+  const T12 = tok('12', bx, { y: -1500, size: 1.5 });
+  await wait(450);
+  await tween(T12, { y: 0 }, 420, E.in); S.shadow = null;
+  impact(bx, G, { ring: 320, shake: 24, flash: .15 }); puff(bx - 70, G, 8, -1); puff(bx + 70, G, 8, 1); squash(T12);
+  hero.mouth = 1; heroJumpTo(hero.x - 120, 0, 450, 80).then(() => hero.dir = 1); say('!', 600);
+  await wait(800); hero.mouth = 0;
+  const dv = tok('÷', 0, { y: -800 }), th = tok('3', 0, { y: -800 });
+  let c7 = centers([T12, dv, th], { anchor: 0, x: T12.x }); dv.x = c7[1]; th.x = c7[2];
+  await dropTok(dv, 380); await dropTok(th, 350);
+  camTo((T12.x + th.x) / 2 - 60, CY - 15, Z * .92, 500);
+  await equip('sword');
+  hero.brow = 1;
+  await heroRunTo(T12.x - tw(T12) * .5 - 120, 420, true);
+  await tween(hero, { armA: 3.1 }, 300, E.out); hero.glint = 1; sfx.clang();
+  [dv, th].forEach(t => tween(t, { x: t.x + 190 }, 500, E.out)); // korkup kaçışıyorlar
+  camTo(hero.x + 150, CY, Z * 1.3, 600);
+  popWord('HİYAAA!', hero.x + 10, G - 200, { size: 34, color: '#fff', burst: SCARF });
+  await wait(750);
+  speedLines(500);
+  const w12 = tw(T12), r12 = w12 / 2, cuts = [-r12 + w12 / 3, -r12 + 2 * w12 / 3], ang = .2, cyc = G - FS * T12.size * .36;
+  const ca = Math.cos(ang), sa = Math.sin(ang), Lc = FS * T12.size * .75;
+  hero.dash = true; sfx.swoosh();
+  const xa = hero.x, xb = th.x + 330; let made = 0;
+  await anim(300, k => {
+    hero.x = xa + (xb - xa) * k; hero.armA = 3.1 - 2.6 * k;
+    const kk = Math.min(2, Math.floor(k * 3));
+    while (made < kk) { const cx = cuts[made]; slash(T12.x + cx * ca + Lc * sa, cyc + cx * sa - Lc * ca, T12.x + cx * ca - Lc * sa, cyc + cx * sa + Lc * ca, { life: 1000, w: 9, color: '#9fd8ff' }); sfx.swoosh(); made++; }
+  }, E.io);
+  hero.dash = false; hitStop(170, 90); S.flash = .3; S.flashColor = '#fff';
+  camTo((T12.x + th.x) / 2, CY, Z * .95, 700);
+  await tween(hero, { armA: .35 }, 500);
+  say('...', 700); await wait(800); sfx.clang();
+  untok(T12);
+  const pcs = [0, 1, 2].map(i => ({ t: T12, x0: i ? cuts[i - 1] : -w12 * 2, x1: i < 2 ? cuts[i] : w12 * 2, dx: 0, dy: 0, rot: 0, ang }));
+  S.pieces.push(...pcs);
+  S.slow = .3; tween(S, { slow: 1 }, 450, E.in);
+  const mids = [0, 1, 2].map(i => -r12 + w12 * (i + .5) / 3), slotX = [0, 1, 2].map(i => T12.x + (i - 1) * FS * 1.0);
+  await Promise.all(pcs.map((p, i) => anim(650, k => { p.dx = (slotX[i] - T12.x - mids[i] * ca) * k; p.dy = -Math.sin(Math.PI * k) * 70; p.rot = (i - 1) * .15 * Math.sin(Math.PI * k); }, E.out)));
+  const fours = [];
+  for (let i = 0; i < 3; i++) {
+    S.pieces = S.pieces.filter(p => p !== pcs[i]);
+    const f4 = tok('4', slotX[i], { s: 0, tag: String(i + 1) });
+    burst(slotX[i], G - FS * .36, 12, { speed: .35, colors: ['#fff', '#9fd8ff'] }); sfx.pop(1 + i * .15);
+    tween(f4, { s: 1 }, 300, E.back); fours.push(f4); await wait(160);
+  }
+  hero.brow = 0;
+  await wait(1000);
+  fours.forEach(f4 => f4.tag = null);
+  const n12 = tok('12', 0, { alpha: 0 }), eq7 = tok('=', 0, { s: 0 });
+  eq = [n12, dv, th, eq7, fours[0]];
+  const mid7 = T12.x + 40;
+  const c8 = centers(eq, { mid: mid7 }); n12.x = c8[0];
+  [fours[1], fours[2]].forEach(f4 => { burst(f4.x, G - FS * .36, 12, { shape: 'star', speed: .3, colors: ['#fff', '#ffe066'] }); tween(f4, { s: 0 }, 250, E.in).then(() => untok(f4)); });
+  tween(n12, { alpha: 1 }, 400);
+  await relayout(eq, { mid: mid7 }, 550);
+  sfx.win(); await tween(eq7, { s: 1 }, 300, E.back);
+  fours[0].glow = 1; tween(fours[0], { glow: 0 }, 1200);
+  camFit(500, Z * .95);
+  heroRunTo(fours[0].x + 140, 600).then(() => hero.dir = -1);
+  await wait(1400);
+
+  let cur = fours[0];
+  [n12, dv, th, eq7].forEach((t, i) => fallAway(t, i * 70));
+  await Promise.all([tween(cur, { x: mid7 }, 500), camTo(mid7 + 60, CY, Z * 1.05, 500)]);
+  await heroRunTo(mid7 - 150, 450, true);
+  for (const [dTxt, out] of [['2', '2'], ['2', '1']]) {
+    const d1 = tok('÷', 0, { y: -700 }), d2 = tok(dTxt, 0, { y: -700 });
+    const cm = centers([cur, d1, d2], { anchor: 0, x: cur.x }); d1.x = cm[1]; d2.x = cm[2];
+    dropTok(d1, 300); await wait(120); await dropTok(d2, 280);
+    await tween(hero, { armA: 3.1 }, 220, E.out); hero.glint = 1;
+    await wait(200);
+    sfx.swoosh();
+    const cyy = G - FS * .36;
+    tween(hero, { armA: .6 }, 110, E.in);
+    slash(cur.x + 10, cyy - 90, cur.x - 10, cyy + 90, { life: 700, w: 8, color: '#9fd8ff' });
+    hitStop(80);
+    await wait(150);
+    untok(cur);
+    const halves = [-1, 1].map(s => tok(out, cur.x, { s: .8 }));
+    halves.forEach((t, i) => { tween(t, { x: cur.x + (i ? 70 : -70), s: 1 }, 350, E.out); });
+    sfx.pop(1.2); burst(cur.x, cyy, 12, { speed: .4, colors: ['#fff', '#9fd8ff'] });
+    [d1, d2].forEach(t => tween(t, { s: 0 }, 250).then(() => untok(t)));
+    await wait(500);
+    halves[1].alpha = 1; tween(halves[1], { s: 0 }, 250).then(() => untok(halves[1]));
+    cur = halves[0];
+    await tween(cur, { x: mid7 }, 300);
+    tween(hero, { armA: .5 }, 200);
+    await wait(300);
+  }
+
+  /* ---- 8) Son: tek bir 1 kalır... ---- */
+  const ONE = cur;
+  camTo(ONE.x - 40, CY - 10, Z * 1.25, 700);
+  await heroRunTo(ONE.x - 75, 500, true);
+  const hp0 = heroHand(30); burst(hp0.x, hp0.y, 10, { shape: 'star', speed: .25, colors: ['#fff', '#ffcf3f'] }); hero.tool = null;
+  await tween(hero, { armA: 1.35 }, 220);
+  ONE.follow = true; tween(ONE, { s: .55 }, 250); sfx.pop(1.4);
+  await tween(hero, { armA: 2.5 }, 300);
+  await wait(400);
+  hero.wink = 1; hero.mouth = 1; say('Bir daha?', 1200); await wait(1400); hero.wink = 0; hero.mouth = 0;
+  ONE.follow = false; sfx.swoosh();
+  const oy = ONE.y;
+  tween(hero, { armA: 3.0 }, 150);
+  await anim(650, k => { ONE.y = oy - 900 * k; ONE.rot = k * 8; }, E.out);
+  untok(ONE);
+  S.cut = { a: 0, txt: '1 + 1 = ?' }; sfx.boom();
+  await tween(S.cut, { a: 1 }, 150);
+  await wait(1400);
+  // kapanış kartı
+  S.toks = []; S.pieces = [];
+  hero.x = hero.lastX = 0; hero.hop = 0; hero.armA = .5; hero.dir = 1; hero.tool = null;
+  Object.assign(S.cam, { x: 0, y: vertical ? -180 : -120, z: vertical ? 1.6 : 1.7 });
+  S.cut = null;
+  S.card = { s: 0 }; tween(S.card, { s: 1 }, 500, E.back); sfx.win();
+  hero.wink = 1; hero.mouth = 1; say('Abone olmayı unutma!', 2600); await wave(2600, 2.4);
+  hero.wink = 0; hero.mouth = 0;
+  await wait(900);
+}
+
+/* ================== Oynatma & video çıktısı ================== */
+function layout() {
+  W = vertical ? 720 : 1280; H = vertical ? 1280 : 720;
+  cv.width = W * R; cv.height = H * R;
+  document.getElementById('wrap').classList.toggle('vertical', vertical);
+}
+let runToken = 0;
+async function start() {
+  initAudio();
+  runToken++; const my = runToken;
+  resetScene(); started = true; running = true; paused = false;
+  await story();
+  if (my === runToken) running = false;
+}
+function togglePause() { if (!started) return; paused = !paused; if (AC) paused ? AC.suspend() : AC.resume(); document.getElementById('btnPause').textContent = paused ? '▶ Devam' : '⏸ Duraklat'; }
+document.getElementById('btnPlay').onclick = () => { document.getElementById('btnPlay').textContent = '↺ Baştan'; start(); };
+document.getElementById('btnPause').onclick = togglePause;
+document.getElementById('btnMusic').onclick = e => { musicOn = !musicOn; e.target.textContent = musicOn ? '🎵 Müzik: Açık' : '🎵 Müzik: Kapalı'; };
+cv.addEventListener('click', () => { if (!started) { document.getElementById('btnPlay').textContent = '↺ Baştan'; start(); } else togglePause(); });
+addEventListener('keydown', e => { if (e.code === 'Space') { e.preventDefault(); togglePause(); } });
+
+/* video üretimi (headless tarayıcıdan çağrılır) */
+window.R_init = async () => { await Promise.all([document.fonts.load(EQF(80)), document.fonts.load(F(40))]).catch(() => { }); return true; };
+window.R_start = () => { started = true; running = true; resetScene(); story().then(() => { window.R_done = true; }); };
+window.R_step = () => { stepFrame(1000 / 30); draw(); return cv.toDataURL('image/jpeg', .92); };
+window.R_audio = async () => {
+  const sr = 44100, dur = vclock / 1000 + .5;
+  const oc = new OfflineAudioContext(2, Math.ceil(dur * sr), sr); OFF = true; setupAudio(oc);
+  for (const e of events) { T0 = e.t; SFX[e.k](...e.a); }
+  if (musicOn) { T0 = 0; const spb = 60 / BPM / 2; for (let st = 0, t = .05; t < dur - 1.2; st++, t += spb) musicStep(st, t); }
+  const buf = await oc.startRendering();
+  const n = buf.length, dv = new DataView(new ArrayBuffer(44 + n * 4));
+  const ws = (o, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
+  ws(0, 'RIFF'); dv.setUint32(4, 36 + n * 4, true); ws(8, 'WAVE'); ws(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 2, true);
+  dv.setUint32(24, sr, true); dv.setUint32(28, sr * 4, true); dv.setUint16(32, 4, true); dv.setUint16(34, 16, true); ws(36, 'data'); dv.setUint32(40, n * 4, true);
+  const L = buf.getChannelData(0), Rc = buf.getChannelData(1); let o = 44;
+  for (let i = 0; i < n; i++) { dv.setInt16(o, clamp(L[i], -1, 1) * 32767, true); dv.setInt16(o + 2, clamp(Rc[i], -1, 1) * 32767, true); o += 4; }
+  const u8 = new Uint8Array(dv.buffer); let bin = '';
+  for (let i = 0; i < u8.length; i += 0x8000) bin += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+  return btoa(bin);
+};
+
+layout(); resetScene();
+if (!RENDER) {
+  hero.x = hero.lastX = 0; Object.assign(S.cam, { x: 0, y: -90, z: vertical ? 1.3 : 1.6 });
+  let lastT = performance.now();
+  const loop = t => { const real = Math.min(50, t - lastT); lastT = t; if (started && !paused) stepFrame(real); draw(); requestAnimationFrame(loop); };
+  (document.fonts ? document.fonts.load(EQF(80)).catch(() => { }) : Promise.resolve()).finally(() => requestAnimationFrame(t => { lastT = t; loop(t); }));
+}
+</script>
+</body>
+</html>

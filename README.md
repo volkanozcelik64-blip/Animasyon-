@@ -24,3 +24,17 @@ Ek kurulum yok. `index.html` dosyasını tarayıcıda açıp **▶ Başlat**'a y
 - Hız ayarı (0.75×–1.5×), duraklatma (Boşluk tuşu), müzik aç/kapa.
 - Efektler: kamera yakınlaştırma, darbe anında donma (hit-stop), anime hız çizgileri, renk ters çevirme flaşı, çizgi roman patlama balonları, ışık huzmeleri, toz bulutları, ateş ve yıldız izleri, sakura yaprakları, havai fişekler.
 - Tüm grafikler ve sesler kodla üretilir (Canvas + Web Audio); dış dosya yok.
+
+## Video: Nod ve Sayılar (`video.html`)
+
+"Animator vs Math" tarzında, siyah zeminde Nod'un büyüyen bir denklemin içinde dört işlemle boğuştuğu 78 saniyelik kısa film.
+Hazır video: [`video/nod-ile-matematik.mp4`](video/nod-ile-matematik.mp4) (1920×1080, 30 fps, sesli).
+
+Akış: `1` → `1+1=2` → +1'lerle `=10`'a kadar sayma → mıknatısla `2+2+2+2+2` → değnekle `5×2`, sonra `5×20=100` → çekiçle `100−1−1−98=0` → Nod sıfırın üstünde yuvarlanır → gökten `12` düşer, kılıçla `12÷3=4`, `4÷2=2`, `2÷2=1` → "Bir daha?" → `1 + 1 = ?` → kapanış.
+
+`video.html` tarayıcıda oynatılabilir. Videoyu yeniden üretmek için (Chromium + Playwright + ffmpeg gerekir):
+
+```bash
+python3 tools/build-video.py tools/video.tpl.html   # index.html'deki Nod çizimini alıp video.html'i üretir
+NODE_PATH=$(npm root -g) node tools/render-video.js $PWD/video.html $PWD/video/nod-ile-matematik.mp4
+```
