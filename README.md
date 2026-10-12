@@ -43,8 +43,8 @@ NODE_PATH=$(npm root -g) node tools/render-video.js $PWD/video.html $PWD/video/n
 
 ## Video 2: Sayıların Sihri (`video2.html`)
 
-Dikey (9:16) ~90 saniyelik, konuşmasız kısa film. Beyaz zemin, koyu rakamlar, kırmızı vurgular; kahraman kırmızı atkılı çöp adam.
-Hazır video: [`video/sayilarin-sihri.mp4`](video/sayilarin-sihri.mp4) (1080×1920, 30 fps, sesli).
+Yatay (16:9) ~90 saniyelik, konuşmasız kısa film. Beyaz zemin, koyu rakamlar, kırmızı vurgular; kahraman kırmızı atkılı çöp adam.
+Hazır video: [`video/sayilarin-sihri.mp4`](video/sayilarin-sihri.mp4) (1920×1080, 30 fps, sesli). `video2.html?v=1` dikey (9:16) sürümü açar.
 
 Akış: gökten düşen Nod → `9 × 7 = 63`, 63'ün üstünde tepinince `6 + 3 = 9` → hızlanan turlar (`9 × 8`, `9 × 123`, `9 × 4567`, hep 9) →
 `142857` düşer, rakamlar çarka dönüşür, Nod hamster tekerleği gibi koşarken `×2 … ×6` hep aynı rakamlar → `×7` çarpar: `999999` →
@@ -54,5 +54,5 @@ kâğıt katlama `2⁰ … 2⁴²`, gökyüzü ve uzay, Nod Ay'a çarpar (≈ 43
 Efektler: darbede donma, RGB ayrışması, darbe çizgileri, flaş ve renk ters çevirme, sinema şeritleri, hız çizgileri, hareket bulanıklığı, rakam izleri, parçalanan rakamlar, film greni.
 
 ```bash
-NODE_PATH=$(npm root -g) node tools/render-video.js $PWD/video2.html $PWD/video/sayilarin-sihri.mp4 1
+NODE_PATH=$(npm root -g) node tools/render-video.js $PWD/video2.html $PWD/video/sayilarin-sihri.mp4      # yatay 1920×1080 (dikey için sona 1 ekle)
 ```

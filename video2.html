@@ -26,8 +26,9 @@
 :root[data-theme="dark"]{--bg:#121216;--panel:#1c1c22;--line:#33333d;--fg:#f2f2f2;--muted:#9a9aa8;color-scheme:dark}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font-ui);padding-inline:16px;padding-block:16px 28px}
-.app{max-width:900px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
-.stage-wrap{width:min(100%,calc(80vh*9/16));margin:0 auto}
+.app{max-width:1280px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+.stage-wrap{width:min(100%,calc(80vh*16/9));margin:0 auto}
+.stage-wrap.vertical{width:min(100%,calc(80vh*9/16))}
 canvas{display:block;width:100%;height:auto;border-radius:14px;border:1px solid var(--line);background:#fff;cursor:pointer}
 .controls{display:flex;flex-wrap:wrap;gap:10px;justify-content:center}
 button{font-family:var(--font-ui);font-size:1rem;font-weight:600;color:var(--fg);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 14px;cursor:pointer}
@@ -51,7 +52,8 @@ button.primary{background:var(--accent);border-color:var(--accent);color:var(--o
 "use strict";
 const QS = new URLSearchParams(location.search);
 const RENDER = QS.has('render');
-const R = 1.5, W = 720, H = 1280;
+const VERT = QS.get('v') === '1';            // varsayılan yatay 16:9, ?v=1 dikey
+const R = 1.5, W = VERT ? 720 : 1280, H = VERT ? 1280 : 720, ZF = VERT ? 1 : 1.05;
 const INK = '#16161f', RED = '#e04848', PAPER = '#ffffff';
 const cv = document.getElementById('stage'), ctx = cv.getContext('2d');
 cv.width = W * R; cv.height = H * R;
@@ -530,7 +532,7 @@ function drawHud() { // ekrana sabit sayaç (kâğıt sahnesi)
   const h = S.hud; if (!h || h.a <= .01) return;
   ctx.save(); ctx.globalAlpha = h.a; ctx.textBaseline = 'alphabetic'; ctx.lineJoin = 'round';
   const dark = S.sky > 1.2, fg = dark ? '#fff' : INK, st = dark ? 'rgba(0,0,0,.5)' : 'rgba(255,255,255,.8)';
-  ctx.translate(W / 2, h.y); ctx.scale(h.s, h.s);
+  ctx.translate(VERT ? W / 2 : W * .2, h.y); ctx.scale(h.s * (VERT ? 1 : .85), h.s * (VERT ? 1 : .85));
   ctx.font = EQF(130, 700); const bw = ctx.measureText('2').width; ctx.font = EQF(72, 700); const ew = ctx.measureText(h.exp).width;
   const x0 = -(bw + ew) / 2;
   ctx.lineWidth = 12; ctx.strokeStyle = st;
@@ -570,7 +572,7 @@ function draw() {
   drawBG();
   ctx.save();
   if (S.shake > .3) ctx.translate((Math.random() - .5) * S.shake, (Math.random() - .5) * S.shake);
-  const c = S.cam; ctx.translate(W / 2, H / 2); ctx.scale(c.z, c.z); ctx.translate(-c.x, -c.y);
+  const c = S.cam; ctx.translate(W / 2, H / 2); ctx.scale(c.z * ZF, c.z * ZF); ctx.translate(-c.x, -c.y);
   drawMoon();
   drawPaper();
   drawWheel();
@@ -860,7 +862,7 @@ async function scenePyramid(NI) {
   burst(hero.x, hero.y - 150, 20, { shape: 'star', speed: .4, colors: [RED, '#ffb703'] });
   // geri çekil: bütün piramit görünsün, ortadaki 9 kırmızı
   pyr[0].sup = null;
-  await camTo(0, -440, .62, 900);
+  await camTo(0, VERT ? -440 : -420, VERT ? .62 : .52, 900);
   const bottom = pyr[0];
   // alttaki satırın ortasındaki 9'u vurgula: üstüne kırmızı 9 bindir
   ctx.font = EQF(FS); const fw = ctx.measureText(rowsTxt[0]).width, cw = ctx.measureText('9').width;
@@ -914,7 +916,7 @@ async function sceneNines(P) {
   await wait(900);
   // kamera hızla geri çekilir: dokuzlar uzaktan bir çizgi gibi görünür, sonra 1'e çöker
   const x0 = z.x - 200, x1 = lastX;
-  await camTo((x0 + x1) / 2, -170, W / (x1 - x0 + 200), 900, E.io);
+  await camTo((x0 + x1) / 2, -170, W / (x1 - x0 + 200) / ZF, 900, E.io);
   await wait(300);
   sfx.magic();
   const cx = (x0 + x1) / 2;
@@ -943,7 +945,7 @@ async function scenePaper(O) {
   hero.x = cx - 250;
   sfx.paper();
   await tween(S.paper, { x: cx }, 500, E.out);
-  S.hud = { exp: '0', label: '0,1 mm', a: 0, s: 1, y: 230 }; tween(S.hud, { a: 1 }, 300);
+  S.hud = { exp: '0', label: '0,1 mm', a: 0, s: 1, y: VERT ? 230 : H * .42 }; tween(S.hud, { a: 1 }, 300);
   await jumpTo(cx, -6, 450, 110);
   await wait(300);
   // katlama
@@ -987,7 +989,7 @@ async function scenePaper(O) {
   S.moon.rot = 0; tween(S.moon, { rot: .15 }, 400, E.elastic);
   await wait(300);
   // ayın altında sayılar
-  S.hud.exp = '42'; S.hud.label = '≈ 439.805 km'; S.hud.y = H - 260; S.hud.s = 1.4; tween(S.hud, { s: 1 }, 400, E.back); sfx.ding();
+  S.hud.exp = '42'; S.hud.label = '≈ 439.805 km'; S.hud.y = VERT ? H - 260 : H * .42; S.hud.s = 1.4; tween(S.hud, { s: 1 }, 400, E.back); sfx.ding();
   await wait(1400);
   return { cx, moonY };
 }
@@ -1015,7 +1017,7 @@ async function sceneEnd(P) {
   await wait(800);
   hero.noBlink = false;
   face('dot', 'smile'); await pose('stand', 300);
-  await camTo(cx, -330, 1.25, 900);
+  await camTo(cx, VERT ? -330 : -230, VERT ? 1.25 : 1.05, 900);
   await wait(300);
   hero.dir = 1; face('wink', 'grin'); hero.noBlink = true;
   await pose('proud', 250);
@@ -1073,6 +1075,7 @@ window.R_audio = async () => {
   return btoa(bin);
 };
 
+if (VERT) document.querySelector('.stage-wrap').classList.add('vertical');
 fxInit(); resetScene();
 if (!RENDER) {
   Object.assign(S.cam, { x: 0, y: -170, z: 1 });
