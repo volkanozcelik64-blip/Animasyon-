@@ -86,6 +86,9 @@ jump, 180° spin, "SIUUU!" landing (paper lines shake) → his arm swings back, 
 frantic repair montage (collecting shards, ripping tape with his teeth, wrap-wrap-wrap, crooked vase stands) → one finger, let go… it holds → tiny "siu…" →
 door bursts open, Mom spots the vase: red face, steam, bun pops → "NOOOD!", slipper flies at the camera, Nod dives behind the armchair, Dad covers his eyes → smash cut to black.
 
+Effects: hit-stop freezes with shudder on impacts, motion blur on fast moves (launch, jump-spin, scramble, tape wrap, slipper throw), inverted impact frames, comic starbursts, manga focus lines, slow-motion desaturation during the vase wobble, red rage vignette, sparkles, flickering paper grain, line boil, camera shake.
+Preview stills: [`onizleme/`](onizleme/).
+
 Sound (all synthesized with Web Audio): TV crowd roar, whoosh, formant-synth "SIUUU" shout, glass shatter, tape rips and squeaks, whispered "siu", door bang, Mom's "NOOOD!", kettle steam, slipper whoosh.
 
 ```bash

@@ -182,7 +182,7 @@ function speedLines(x0, y0, x1, y1, n, seed, len = 260, col = 'rgba(27,26,24,.55
     line([[x, y], [x + dir[0] * L, y + dir[1] * L]], lw, col);
   }
 }
-function star(x, y, r, n = 5, k = .45) { const p = []; for (let i = 0; i < n * 2; i++) { const a = i / (n * 2) * TAU - PI / 2, rr2 = i % 2 ? r * k : r; p.push([x + Math.cos(a) * rr2, y + Math.sin(a) * rr2]); } poly(p); }
+function star(x, y, r, n = 5, k = .45) { ctx.beginPath(); const p = []; for (let i = 0; i < n * 2; i++) { const a = i / (n * 2) * TAU - PI / 2, rr2 = i % 2 ? r * k : r; p.push([x + Math.cos(a) * rr2, y + Math.sin(a) * rr2]); } poly(p); }
 
 /* ============================================================
    NOD — white rubber-hose body, round head, brown eyes, red scarf
@@ -1136,13 +1136,68 @@ SH.black = () => { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#000'; c
 
 const SHOTS = [[0, 's1'], [2.0, 's2'], [4.0, 's3'], [5.4, 's4'], [8.0, 's5'], [12.05, 's6'], [14.0, 's7'], [17.0, 's8a'], [18.3, 's8b'], [19.4, 's8c'], [20.9, 's8d'], [21.7, 's8e'], [23.0, 's9'],
   [25.0, 's10a'], [25.9, 's10b'], [26.35, 's10c'], [26.75, 's10d'], [28.0, 's11a'], [29.0, 's11b'], [CUT, 'black']];
-function draw(t) {
+function drawRaw(t) {
   T = t;
   let i = SHOTS.length - 1; while (i > 0 && SHOTS[i][0] > t) i--;
   const [t0, name] = SHOTS[i];
   if (name === 'black') { SH.black(); return; }
   drawPaper(t); ctx.save(); SH[name](t, t - t0); ctx.restore();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
+}
+
+/* ============================================================
+   POST EFFECTS — hit-stop, motion blur, impact frames,
+   focus lines, comic bursts, sparkles, rage vignette
+   ============================================================ */
+const HITSTOP = [[9.43, .12], [13.46, .08], [25.06, .07], [4.13, .06]];
+const BLUR = [[4.1, 4.6], [5.4, 5.6], [7.84, 9.45], [11.55, 12.05], [13.05, 13.45], [15.45, 16.15], [17.0, 18.3], [19.4, 20.9], [28.7, CUT]];
+const IMPACTS = [[9.43, 540, 1180, '#ffd23f'], [13.46, 540, 1300, '#8cc3f5'], [25.06, 300, 900, '#ffd23f'], [4.13, 540, 1000, '#ffd23f'], [2.78, 600, 800, '#ffd23f']];
+const FOCUS = [[9.43, 1.6], [14.0, .6], [25.06, .5], [28.2, .8], [16.12, .3]];
+const acc = document.createElement('canvas'); acc.width = W; acc.height = H; const actx = acc.getContext('2d');
+function remap(t) { for (const [h, d] of HITSTOP) if (t >= h && t < h + d) return h; return t; }
+function focusLines(t, a) {
+  ctx.save(); ctx.globalAlpha = a; ctx.translate(W / 2, H / 2);
+  for (let i = 0; i < 70; i++) {
+    const ang = i / 70 * TAU + hash(i + Math.floor(t * 15)) * .06, r0 = 470 + hash(i * 3.3 + Math.floor(t * 15)) * 260, w = 3 + hash(i * 7.1) * 9;
+    const c = Math.cos(ang), sn = Math.sin(ang), n = [-sn, c];
+    ctx.beginPath(); ctx.moveTo(c * r0, sn * r0 * 1.6); ctx.lineTo(c * 1400 + n[0] * w, sn * 2200 + n[1] * w); ctx.lineTo(c * 1400 - n[0] * w, sn * 2200 - n[1] * w); ctx.closePath();
+    ctx.fillStyle = INK; ctx.fill();
+  }
+  ctx.restore();
+}
+function postFX(t) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  if (t >= CUT) return;
+  // comic burst behind-the-eye flashes at impacts
+  for (const [t0, x, y, col] of IMPACTS) {
+    const k = t - t0; if (k < 0 || k > .35) continue;
+    if (k < 1 / 30) { ctx.globalCompositeOperation = 'difference'; ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H); ctx.globalCompositeOperation = 'source-over'; continue; } // impact frame
+    const p = k / .35, s = E.out(Math.min(1, p * 3));
+    ctx.save(); ctx.globalAlpha = 1 - p; ctx.translate(x, y); ctx.rotate(p * .6); ctx.lineJoin = 'round';
+    star(0, 0, 420 * s, 12, .6); ctx.lineWidth = 16; ctx.strokeStyle = INK; ctx.stroke(); star(0, 0, 420 * s, 12, .6); ctx.lineWidth = 8; ctx.strokeStyle = col; ctx.stroke();
+    for (let i = 0; i < 10; i++) { const a = i / 10 * TAU + .3, r = 260 + 420 * s; star(Math.cos(a) * r, Math.sin(a) * r * 1.2, 26 * (1 - p), 4, .35); ctx.fillStyle = col; ctx.fill(); ctx.lineWidth = 5; ctx.stroke(); }
+    ctx.restore();
+  }
+  for (const [t0, d] of FOCUS) { const k = t - t0; if (k >= 0 && k < d) focusLines(t, .55 * (1 - Math.pow(k / d, 2))); }
+  // sparkles on the tiny fist pump
+  if (t > 23.8 && t < 24.6) { const k = (t - 23.8) / .8; for (let i = 0; i < 5; i++) { const a = i * 1.26, r = 60 + k * 120; ctx.save(); ctx.globalAlpha = 1 - k; star(W / 2 + 40 + Math.cos(a) * r, 980 + Math.sin(a) * r, 18 * (1 - k * .5), 4, .35); ctx.fillStyle = '#ffd23f'; ctx.fill(); ctx.lineWidth = 4; ctx.strokeStyle = INK; ctx.stroke(); ctx.restore(); } }
+  // rage vignette: red pulse once Mom sees the vase
+  if (t > 26.75) { const a = clamp((t - 26.75) / .6, 0, 1) * (.32 + .12 * Math.sin(t * 22)); const g = ctx.createRadialGradient(W / 2, H / 2, H * .25, W / 2, H / 2, H * .72); g.addColorStop(0, 'rgba(220,30,20,0)'); g.addColorStop(1, `rgba(220,30,20,${a})`); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); }
+  // slow-mo desaturation during the vase wobble
+  if (t > 12.05 && t < 13.45) { ctx.globalCompositeOperation = 'saturation'; ctx.fillStyle = 'rgba(128,128,128,.45)'; ctx.fillRect(0, 0, W, H); ctx.globalCompositeOperation = 'source-over'; }
+  // flickering paper grain
+  ctx.globalAlpha = .05; for (let i = 0; i < 260; i++) { ctx.fillStyle = i % 2 ? '#000' : '#fff'; ctx.fillRect(hash(i * 1.7 + Math.floor(t * 30) * .31) * W, hash(i * 2.9 + Math.floor(t * 30) * .17) * H, 3, 3); } ctx.globalAlpha = 1;
+}
+function draw(t) {
+  const tt = remap(t), blur = BLUR.some(([a, b]) => tt >= a && tt < b) && tt === t;
+  if (blur) {
+    const n = 4, dt = 1 / FPS / n;
+    for (let i = 0; i < n; i++) { drawRaw(tt - (n - 1 - i) * dt); actx.globalAlpha = i === 0 ? 1 : 1 / (i + 1); actx.drawImage(cv, 0, 0); }
+    actx.globalAlpha = 1; ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(acc, 0, 0); T = tt;
+  } else drawRaw(tt);
+  // hit-stop shudder: shift the frozen frame
+  if (tt !== t) { ctx.setTransform(1, 0, 0, 1, 0, 0); const j = (hash(Math.floor(t * 30)) - .5) * 22; ctx.drawImage(cv, j, -j * .5); }
+  postFX(t);
 }
 
 /* ============================================================
