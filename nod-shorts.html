@@ -1,0 +1,716 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Nod vs Numbers</title>
+<style>
+/* Siyah sahne, altında küçük kumanda. Tüm görüntü ve ses kodla üretilir; dış dosya yok. */
+:root{--bg:#000;--panel:#111;--line:#262626;--fg:#eee;--muted:#888;--accent:#3EE0A8;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+  display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px}
+canvas{display:block;height:min(82vh,calc((100vw - 32px) * 16 / 9));aspect-ratio:9/16;max-width:100%;
+  background:#000;border:1px solid var(--line);border-radius:12px;cursor:pointer}
+.controls{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+button{font:inherit;font-weight:600;color:var(--fg);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 14px;cursor:pointer}
+button.primary{background:var(--accent);border-color:var(--accent);color:#000}
+button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+</style>
+</head>
+<body>
+<canvas id="c" aria-label="Nod vs Numbers animation"></canvas>
+<div class="controls">
+  <button id="play" class="primary">▶ Play</button>
+  <button id="mute">🔊 Sound: on</button>
+</div>
+<script>
+"use strict";
+/* ============================================================
+   Nod vs Numbers — 30 s, 9:16, 24 fps.
+   Her kare zamanın saf fonksiyonudur: draw(t). Ses olayları
+   önceden listelenir; tarayıcıda gerçek zamanlı, render'da
+   OfflineAudioContext ile üretilir.
+   ============================================================ */
+const W = 1080, H = 1920, FPS = 24, DUR = 30, CUT = 29.5, MINT = '#3EE0A8';
+const cv = document.getElementById('c'); cv.width = W; cv.height = H;
+const ctx = cv.getContext('2d');
+const PI = Math.PI, TAU = 2 * PI;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v)), lerp = (a, b, p) => a + (b - a) * p;
+const E = {
+  lin: p => p, in: p => p * p, out: p => 1 - (1 - p) * (1 - p),
+  io: p => p < .5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2,
+  in3: p => p * p * p, out3: p => 1 - Math.pow(1 - p, 3),
+  back: p => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(p - 1, 3) + c1 * Math.pow(p - 1, 2); },
+};
+// Anahtar kare izi: [[t, değer, easing], ...]
+function K(keys) {
+  return t => {
+    if (t <= keys[0][0]) return keys[0][1];
+    for (let i = 1; i < keys.length; i++) if (t <= keys[i][0]) {
+      const [t0, v0] = keys[i - 1], [t1, v1, e] = keys[i];
+      return v0 + (v1 - v0) * E[e || 'io'](t1 > t0 ? (t - t0) / (t1 - t0) : 1);
+    }
+    return keys[keys.length - 1][1];
+  };
+}
+const hash = n => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
+const vnoise = x => { const i = Math.floor(x), f = x - i, u = f * f * (3 - 2 * f); return lerp(hash(i), hash(i + 1), u) * 2 - 1; };
+// Sönümlü sallanma: [t0, genlik, açısal hız, sönüm]
+function wob(t, ev) { let s = 0; for (const [t0, a, w = 18, d = 5] of ev) if (t > t0) { const k = t - t0; s += a * Math.exp(-k * d) * Math.sin(k * w); } return s; }
+// Zıplama yürüyüşü: |sin| tepecikler
+function bob(t, t0, t1, amp, n) { return t > t0 && t < t1 ? -Math.abs(Math.sin((t - t0) / (t1 - t0) * PI * n)) * amp : 0; }
+
+/* ---------- Yol: hareket parçaları zinciri ---------- */
+class Path {
+  constructor(x, y) { this.p0 = [x, y]; this.s = []; }
+  to(t0, t1, x, y, ex = 'io', ey = ex) { this.s.push({ k: 'to', t0, t1, x, y, ex, ey }); return this; }
+  jump(t0, t1, x, y, h, ex = 'lin') { this.s.push({ k: 'j', t0, t1, x, y, h, ex }); return this; }
+  follow(t0, t1, f) { this.s.push({ k: 'f', t0, t1, f }); return this; }
+  set(t, x, y) { this.s.push({ k: 'set', t0: t, t1: t, x, y }); return this; }
+  tgt(g, t) { if (typeof g.x === 'function') { const v = g.x(t); return g.y === undefined ? v : [v, g.y]; } return [g.x, g.y]; }
+  ev(g, t, c) {
+    if (g.k === 'set') return [g.x, g.y];
+    if (g.k === 'f') return g.f(t);
+    const p = g.t1 > g.t0 ? clamp((t - g.t0) / (g.t1 - g.t0), 0, 1) : 1, [tx, ty] = this.tgt(g, t);
+    if (g.k === 'to') return [lerp(c[0], tx, E[g.ex](p)), lerp(c[1], ty, E[g.ey](p))];
+    return [lerp(c[0], tx, E[g.ex](p)), lerp(c[1], ty, p) - 4 * g.h * p * (1 - p)];
+  }
+  at(t) {
+    let c = this.p0;
+    for (const g of this.s) { if (t < g.t0) return c; c = this.ev(g, Math.min(t, g.t1), c); if (t <= g.t1) return c; }
+    return c;
+  }
+}
+
+/* ============================================================
+   NOD — yuvarlak kare kafa (yüzsüz), tek anten, lastik kollar
+   ============================================================ */
+const P = (o) => Object.assign({ hip: [0, -80], neck: [0, -150], hL: [-34, -84], hR: [34, -84], fL: [-17, 0], fR: [17, 0], hb: 0, ab: 1, ao: 0, lb: 1 }, o);
+const POSES = {
+  stand: P({}),
+  lookUp: P({ neck: [-8, -148], hL: [-40, -88], hR: [40, -88], hb: -.35 }),
+  poke: P({ neck: [14, -147], hL: [-32, -90], hR: [100, -126], fL: [-24, 0], fR: [22, 0], hb: .1, ab: .3 }),
+  startle: P({ hip: [-6, -86], neck: [-22, -154], hL: [-30, -180], hR: [34, -182], fL: [-14, 0], fR: [26, 0], hb: -.25, ab: .4 }),
+  crouch: P({ hip: [-6, -48], neck: [28, -108], hL: [52, -24], hR: [74, -18], fL: [-28, 0], fR: [24, 0], hb: .35, ab: .4 }),
+  holdUp: P({ hip: [0, -82], neck: [0, -152], hL: [-16, -236], hR: [16, -236], fL: [-20, 0], fR: [20, 0], hb: -.1, ab: .3 }),
+  tuck: P({ hip: [0, -100], neck: [0, -166], hL: [-50, -200], hR: [50, -200], fL: [-24, -46], fR: [26, -56], ab: .6 }),
+  lie: P({ hL: [-60, -118], hR: [58, -112], fL: [-32, 0], fR: [28, -6], ab: .5 }),
+  land: P({ hip: [0, -58], neck: [6, -126], hL: [-52, -70], hR: [54, -72], fL: [-30, 0], fR: [30, 0], ab: .6 }),
+  proud: P({ hip: [0, -82], neck: [0, -154], hL: [-22, -92], hR: [22, -92], fL: [-24, 0], fR: [24, 0], hb: -.12, ao: 34, ab: 0 }),
+  shield: P({ hip: [-8, -74], neck: [8, -144], hL: [56, -116], hR: [66, -146], fL: [-36, 0], fR: [30, 0], hb: .05, ab: .3 }),
+  pull: P({ hip: [-22, -70], neck: [-42, -134], hL: [56, -108], hR: [60, -118], fL: [-36, 0], fR: [32, 0], hb: -.1, ab: .2 }),
+  duck: P({ hip: [0, -40], neck: [14, -86], hL: [-6, -136], hR: [24, -138], fL: [-32, 0], fR: [30, 0], hb: .3, ab: .5 }),
+  twist: P({ neck: [6, -150], hL: [44, -122], hR: [54, -140], fL: [-20, 0], fR: [20, 0], ab: .3 }),
+  wind: P({ hip: [-4, -80], neck: [-18, -148], hL: [40, -108], hR: [-84, -176], fL: [-26, 0], fR: [24, 0], hb: -.1, ab: .3 }),
+  throw: P({ hip: [6, -80], neck: [28, -146], hL: [-52, -100], hR: [106, -118], fL: [-28, 0], fR: [30, 0], hb: .1, ab: .2 }),
+  dive: P({ neck: [0, -152], hL: [-12, -232], hR: [12, -234], fL: [-8, 0], fR: [10, 6], ab: .1, lb: 0 }),
+  hold: P({ neck: [4, -150], hL: [30, -104], hR: [46, -108], fL: [-18, 0], fR: [18, 0], ab: .5 }),
+  chopUp: P({ neck: [-6, -150], hL: [30, -104], hR: [24, -236], fL: [-22, 0], fR: [22, 0], ab: .3 }),
+  chop: P({ hip: [0, -72], neck: [14, -142], hL: [-44, -96], hR: [84, -104], fL: [-30, 0], fR: [30, 0], ab: .2 }),
+  spin: P({ hip: [0, -84], neck: [0, -156], hL: [-78, -150], hR: [78, -150], fL: [0, 0], fR: [22, -50], ab: .2 }),
+  victory: P({ hip: [0, -84], neck: [0, -156], hL: [-46, -226], hR: [46, -226], fL: [-22, 0], fR: [22, 0], ab: .3, hb: -.15 }),
+};
+function mixPose(a, b, p) { const o = {}; for (const k in a) { const A = a[k], B = b[k]; o[k] = Array.isArray(A) ? [lerp(A[0], B[0], p), lerp(A[1], B[1], p)] : lerp(A, B, p); } return o; }
+function runPose(ph) {
+  const s = Math.sin(ph), c = Math.cos(ph);
+  return P({ hip: [0, -76 - Math.abs(c) * 6], neck: [18, -144], hL: [10 - s * 36, -96], hR: [10 + s * 36, -96],
+    fL: [s * 34, -Math.max(0, c) * 30], fR: [-s * 34, -Math.max(0, -c) * 30], hb: .12, ab: .7 });
+}
+function poseTrack(keys) {
+  return t => {
+    let i = 0; while (i + 1 < keys.length && keys[i + 1][0] <= t) i++;
+    if (i === 0) return POSES[keys[0][1]];
+    const k = keys[i], pr = keys[i - 1];
+    return mixPose(POSES[pr[1]], POSES[k[1]], E.out3(clamp((t - k[0]) / (k[2] || .12), 0, 1)));
+  };
+}
+
+const NP = new Path(-60, 0)
+  .to(1.95, 2.1, -60, -60, 'lin', 'out').to(2.1, 2.3, -60, 0, 'lin', 'in')
+  .to(2.45, 2.85, 110, 0, 'io', 'lin')
+  .to(3.7, 3.95, 60, 0, 'out', 'lin')
+  .jump(4.75, 5.35, 150, 56, 380)
+  .to(5.35, 5.45, 150, 30, 'lin', 'out').to(5.45, 5.55, 150, 56, 'lin', 'in')
+  .to(6.2, 6.55, 150, 0, 'lin', 'out')
+  .to(7.1, 7.45, -180, 0, 'io', 'lin')
+  .to(7.95, 8.35, -250, -560, 'lin', 'out')
+  .to(8.35, 8.95, 20, -342, 'lin', 'in')
+  .jump(9.2, 9.7, 560, -352, 250)
+  .jump(11.1, 11.45, 737, 0, 120)
+  .jump(12.35, 12.95, 560, -352, 330)
+  .jump(13.3, 13.55, 740, 0, 100)
+  .to(13.9, 14.1, 560, 0, 'out', 'lin')
+  .jump(17.35, 17.7, 1050, -462, 240)
+  .jump(17.78, 18.12, 1590, -352, 200)
+  .jump(18.2, 18.75, 2560, 0, 450)
+  .jump(19.05, 19.4, 3100, 0, 180)
+  .to(20.05, 21.7, 3850, 0, 'lin', 'lin')
+  .jump(21.85, 22.3, 4400, -2000, 300)
+  .set(24.0, 4985, -2400)
+  .to(24.0, 24.5, 4985, -902, 'lin', 'in')
+  .follow(24.9, 25.4, t => [4985, -S2c(t) - 2])
+  .to(25.4, 25.55, 4985, 0, 'lin', 'in');
+const NPOSE = poseTrack([
+  [0, 'stand'], [0.35, 'lookUp', .2], [0.95, 'stand', .05], [1.95, 'stand', .1],
+  [2.95, 'poke', .1], [3.15, 'stand', .12], [3.25, 'poke', .08], [3.45, 'stand', .15],
+  [3.7, 'startle', .08], [4.0, 'stand', .3],
+  [4.75, 'tuck', .08], [5.3, 'lie', .1], [6.2, 'land', .15], [6.55, 'stand', .15],
+  [6.75, 'startle', .08], [7.05, 'stand', .1],
+  [7.45, 'crouch', .12], [7.7, 'holdUp', .15], [7.88, 'crouch', .06], [7.95, 'holdUp', .1],
+  [8.42, 'tuck', .12], [8.95, 'land', .06], [9.1, 'crouch', .08], [9.2, 'tuck', .1], [9.7, 'land', .06], [9.85, 'proud', .2],
+  [10.8, 'holdUp', .12], [11.1, 'tuck', .1], [11.45, 'land', .06], [11.55, 'shield', .12],
+  [12.35, 'tuck', .08], [12.95, 'land', .06], [13.1, 'stand', .15], [13.2, 'startle', .1],
+  [13.3, 'tuck', .08], [13.55, 'land', .06], [13.62, 'pull', .1], [13.9, 'startle', .08], [14.1, 'shield', .15],
+  [15.2, 'duck', .06], [15.55, 'stand', .12], [15.62, 'twist', .1], [15.9, 'wind', .12], [16.18, 'throw', .06], [16.6, 'stand', .2],
+  [16.95, 'proud', .2], [17.3, 'crouch', .05], [17.35, 'tuck', .1], [17.7, 'land', .05], [17.74, 'tuck', .06],
+  [18.12, 'land', .05], [18.17, 'tuck', .06], [18.75, 'land', .05], [18.85, 'stand', .15],
+  [19.0, 'startle', .08], [19.05, 'tuck', .08], [19.4, 'land', .06], [19.55, 'startle', .12],
+  [20.0, 'hold', .1], [21.68, 'crouch', .06], [21.85, 'dive', .1],
+  [24.0, 'tuck', .1], [24.5, 'land', .06], [24.65, 'stand', .15], [24.8, 'startle', .1],
+  [25.4, 'tuck', .08], [25.55, 'land', .06], [25.65, 'hold', .12], [26.05, 'chopUp', .1], [26.3, 'chop', .05],
+  [26.55, 'stand', .12], [26.62, 'holdUp', .1], [26.95, 'hold', .12], [27.0, 'twist', .1], [27.3, 'poke', .1],
+  [27.55, 'stand', .15], [28.0, 'proud', .15], [28.4, 'spin', .12], [29.2, 'victory', .08],
+]);
+const NRUN = K([[0, 0], [2.44, 0], [2.5, .5], [2.8, .5], [2.85, 0], [7.05, 0], [7.1, 1], [7.4, 1], [7.45, 0], [20.0, 0], [20.08, .8], [21.6, .8], [21.68, 0]]);
+const NROT = K([[0, 0], [4.75, 0], [5.35, -2.5 * PI, 'out'], [6.2, -2.5 * PI], [6.55, -TAU, 'back'], [9.25, -TAU], [9.6, 0, 'io'],
+  [12.35, 0], [12.95, -TAU, 'out'], [18.3, -TAU], [18.7, 0, 'io'], [21.85, 0], [22.0, .8, 'out'], [23.99, .8], [24.0, 0]]);
+const NSX = K([[0, 1], [0.95, 1], [1.0, 1.6, 'out'], [1.9, 1.6], [2.05, .85, 'out'], [2.25, 1, 'back']]);
+const NSY = K([[0, 1], [0.95, 1], [1.0, .25, 'out'], [1.9, .25], [2.05, 1.25, 'out'], [2.25, 1, 'back']]);
+const LANDS = [8.95, 9.7, 11.45, 12.95, 13.55, 17.7, 18.12, 18.75, 19.4, 24.5, 25.55];
+const NSYW = LANDS.map(t => [t, -.28, 22, 7]), NSXW = LANDS.map(t => [t, .16, 22, 7]);
+const NFACE = K([[0, 1], [6.8, 1], [6.86, -1, 'lin'], [6.93, -1], [6.99, 1, 'lin'], [7.04, 1], [7.1, -1, 'lin'], [8.38, -1], [8.45, 1, 'lin'],
+  [18.82, 1], [18.9, -1, 'lin'], [19.5, -1], [19.58, 1, 'lin']]);
+const NSPIN = K([[28.4, 0], [29.2, 4 * PI, 'io']]);
+const NANT = [[0.4, .25, 10, 3], [2.05, .9, 14, 2.2], [3.05, .25], [3.33, .25], [3.7, .7, 16, 3], [5.35, .6], [6.5, .7, 14, 2.5], [6.8, .5], [7.0, .5],
+  [8.95, .4], [9.7, .5], [10.0, .4, 10, 2], [11.45, .4], [12.35, .8], [12.95, .5], [13.2, .6], [13.55, .4], [13.9, .6], [14.4, .3], [14.8, .4],
+  [15.55, .9, 16, 2.5], [15.85, .3], [16.2, .5], [17.7, .3], [18.12, .3], [18.75, .4], [19.0, .9], [19.4, .4], [21.7, .4],
+  [24.5, .6], [24.8, .5], [25.55, .5], [26.35, .5], [27.25, .4], [29.2, .6]];
+const NDROOP = K([[0, 0], [0.95, 0], [1.0, 1, 'out'], [1.9, 1], [2.05, 0, 'out'], [4.75, 0], [5.35, .8], [6.2, .8], [6.4, 0], [15.2, 0], [15.25, .9, 'out'], [15.5, .9], [15.6, 0, 'out']]);
+const NGLOW = K([[0, 0], [9.95, 0], [10.05, 1, 'out'], [10.7, 0, 'in'], [29.15, 0], [29.27, 1.8, 'out'], [29.5, 1.8]]);
+const HEADPTS = (() => {
+  const p = [], s = 38, r = 16;
+  for (const [cx, cy, a0] of [[s - r, -(s - r), -PI / 2], [s - r, s - r, 0], [-(s - r), s - r, PI / 2], [-(s - r), -(s - r), PI]])
+    for (let i = 0; i <= 6; i++) { const a = a0 + PI / 2 * i / 6; p.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]); }
+  return p;
+})();
+const SC = .9, PV = 100;
+let NC = { t: NaN };
+function nodAt(t) {
+  if (NC.t === t) return NC.v;
+  const [x, y] = NP.at(t), vx = (NP.at(t + .02)[0] - NP.at(t - .02)[0]) / .04;
+  const fS = NFACE(t), face = fS * Math.cos(NSPIN(t)), fsign = fS >= 0 ? 1 : -1;
+  let po = NPOSE(t); const r = NRUN(t);
+  if (r > 0) po = mixPose(po, runPose(x * fsign / 22), r);
+  po = Object.assign({}, po, { neck: [po.neck[0], po.neck[1] + Math.sin(t * 3.1) * 2] });
+  const rot = NROT(t), sx = NSX(t) + wob(t, NSXW), sy = NSY(t) + wob(t, NSYW), c = Math.cos(rot), s = Math.sin(rot);
+  const Wf = u => { const px = u[0] * sx * face, py = u[1] * sy + PV; return [x + (px * c - py * s) * SC, y + (px * s + py * c - PV) * SC]; };
+  const { hip, neck } = po, dx = neck[0] - hip[0], dy = neck[1] - hip[1], L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L;
+  const sh = [lerp(hip[0], neck[0], .85), lerp(hip[1], neck[1], .85)];
+  const hc = [neck[0] + ux * 40, neck[1] + uy * 40], ha = Math.atan2(ux, -uy) + po.hb, hcs = Math.cos(ha), hsn = Math.sin(ha);
+  const hrot = p => [hc[0] + p[0] * hcs - p[1] * hsn, hc[1] + p[0] * hsn + p[1] * hcs];
+  const d = NDROOP(t);
+  const ant = .06 * Math.sin(t * 2.3) + wob(t, NANT) - clamp(vx * fsign / 1800, -.9, .9) * .8;
+  const base = hrot([0, -38]), a = ha + ant, bend = d * 1.8, len = 46 * (1 - .15 * d);
+  const tip = [base[0] + Math.sin(a + bend) * len, base[1] - Math.cos(a + bend) * len];
+  const actl = [base[0] + Math.sin(a + bend * .3) * len * .55, base[1] - Math.cos(a + bend * .3) * len * .55];
+  const arm = h => { const m = [(sh[0] + h[0]) / 2, (sh[1] + h[1]) / 2], side = h[0] < sh[0] ? -1 : 1; return [m[0] + side * po.ao, m[1] + 14 * po.ab]; };
+  const leg = f => [(hip[0] + f[0]) / 2 + 7 * po.lb, (hip[1] + f[1]) / 2];
+  const v = {
+    x, y, face, fsign, vx,
+    hip: Wf(hip), neck: Wf(neck), sh: Wf(sh),
+    hL: Wf(po.hL), hR: Wf(po.hR), fL: Wf(po.fL), fR: Wf(po.fR),
+    caL: Wf(arm(po.hL)), caR: Wf(arm(po.hR)), clL: Wf(leg(po.fL)), clR: Wf(leg(po.fR)),
+    head: HEADPTS.map(p => Wf(hrot(p))), ab: Wf(base), ac: Wf(actl), at: Wf(tip), glow: NGLOW(t),
+  };
+  NC = { t, v }; return v;
+}
+const hand = (t, ox = 0, oy = 0) => { const n = nodAt(t); return [n.hR[0] + ox * n.fsign, n.hR[1] + oy]; };
+
+/* ============================================================
+   RAKAMLAR ve SEMBOLLER — birim kutuda (yükseklik 1) çizgi yolları
+   ============================================================ */
+const h = .435, LW = .13;
+function arcPts(cx, cy, r, a0, a1, n = 28, rx = r) { const p = []; for (let i = 0; i <= n; i++) { const a = a0 + (a1 - a0) * i / n; p.push([cx + Math.cos(a) * rx, cy + Math.sin(a) * r]); } return p; }
+const SHAPES = {
+  '1': [[[-.17, -.27], [.06, -h], [.06, h]]],
+  '2': [[...arcPts(0, -.19, .245, PI, TAU + .55), [-.25, h], [.27, h]]],
+  '3': [[...arcPts(0, -.235, .2, PI + .5, 2.5 * PI, 22), ...arcPts(0, .195, .24, -PI / 2, PI - .45, 24)]],
+  '5b': [[[-.17, -h], [-.2, -.03], ...arcPts(0, .175, .26, -2.35, 2.5, 28)]],
+  '+': [[[-.22, 0], [.22, 0]], [[0, -.22], [0, .22]]],
+  '-': [[[-.22, 0], [.22, 0]]],
+  '=': [[[-.22, -.1], [.22, -.1]], [[-.22, .1], [.22, .1]]],
+};
+const GLY = [];
+function G(o) { o.id = GLY.length + 1; GLY.push(Object.assign({ S: 340, rot: 0, sx: 1, sy: 1, sxw: [], syw: [], vis: [0, 99], trem: 0, bobs: [] }, o)); return o; }
+const val = (v, t) => typeof v === 'function' ? v(t) : v;
+
+function gState(g, t) {
+  const S = Math.max(0, val(g.S, t));
+  let [x, y] = g.path.at(t);
+  for (const b of g.bobs) y += bob(t, ...b);
+  if (g.yfix) y = g.yfix(t, x, y);
+  const tr = val(g.trem, t);
+  let rot = val(g.rot, t) + wob(t, g.rw || []) + (tr ? vnoise(t * 38 + g.id * 9) * .05 * tr : 0);
+  const sx = val(g.sx, t) + wob(t, g.sxw), sy = val(g.sy, t) + wob(t, g.syw);
+  if (tr) { x += vnoise(t * 45 + g.id) * 5 * tr; y += vnoise(t * 41 + g.id * 3) * 3 * tr; }
+  if (g.gnd) y += S / 2 * (1 - sy);
+  return { x, y, S, rot, sx, sy, pivB: g.pivB ? g.pivB(t) : 0, flag: g.flag ? g.flag(t) : 0, round: g.round ? g.round(t) : 0, prog: g.prog ? g.prog(t) : 1 };
+}
+function unitPolys(g, st) {
+  if (g.ch === '5') { const a = st.flag; return [[[-.17, -h], [-.17 + Math.cos(a) * .4, -h + Math.sin(a) * .4]], ...SHAPES['5b']]; }
+  if (g.ch === '0') return [arcPts(0, 0, h, -PI / 2, 1.5 * PI, 56, .27 + .15 * st.round)];
+  return SHAPES[g.ch];
+}
+function xform(st, t, g, boil = true) {
+  const k = Math.floor(t * 12), jx = boil ? (hash(g.id * 7.13 + k) - .5) * 2.6 : 0, jy = boil ? (hash(g.id * 3.7 + k * 1.3) - .5) * 2.6 : 0;
+  const jr = boil ? (hash(g.id * 1.9 + k * 2.1) - .5) * .012 : 0, r = st.rot + jr, c = Math.cos(r), s = Math.sin(r);
+  const py0 = st.pivB ? st.S / 2 : 0;
+  return u => { const px = u[0] * st.S * st.sx, py = u[1] * st.S * st.sy - py0; return [st.x + jx + px * c - py * s, st.y + jy + py0 + px * s + py * c]; };
+}
+function strokePolys(polys, lw, prog = 1) {
+  ctx.lineWidth = lw;
+  if (prog >= 1) { ctx.beginPath(); for (const p of polys) { ctx.moveTo(p[0][0], p[0][1]); for (let i = 1; i < p.length; i++) ctx.lineTo(p[i][0], p[i][1]); } ctx.stroke(); return; }
+  let tot = 0; for (const p of polys) for (let i = 1; i < p.length; i++) tot += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]);
+  let left = tot * prog; ctx.beginPath();
+  for (const p of polys) {
+    if (left <= 0) break; ctx.moveTo(p[0][0], p[0][1]);
+    for (let i = 1; i < p.length && left > 0; i++) {
+      const sl = Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]), f = Math.min(1, left / sl);
+      ctx.lineTo(lerp(p[i - 1][0], p[i][0], f), lerp(p[i - 1][1], p[i][1], f)); left -= sl;
+    }
+  }
+  ctx.stroke();
+}
+function resample(poly, step) {
+  const out = [poly[0]];
+  for (let i = 1; i < poly.length; i++) {
+    const a = poly[i - 1], b = poly[i], n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / step));
+    for (let j = 1; j <= n; j++) out.push([lerp(a[0], b[0], j / n), lerp(a[1], b[1], j / n)]);
+  }
+  return out;
+}
+const FRAG = new Map();
+function fragments(g) {
+  if (FRAG.has(g)) return FRAG.get(g);
+  const ts = g.shat - 1e-4, st = gState(g, ts), X = xform(st, ts, g, false), fr = [];
+  if (g.ch === '.') fr.push({ pts: [[st.x, st.y]], dot: .075 * st.S });
+  else for (const p of unitPolys(g, st)) { const rp = resample(p, .07); for (let i = 0; i + 1 < rp.length; i += 2) fr.push({ pts: rp.slice(i, i + 3).map(X) }); }
+  fr.forEach((f, i) => {
+    const sd = g.id * 131 + i, cx = f.pts.reduce((a, p) => a + p[0], 0) / f.pts.length, cy = f.pts.reduce((a, p) => a + p[1], 0) / f.pts.length;
+    Object.assign(f, { cx, cy, vx: (cx - st.x) * 3 + (hash(sd) - .5) * 600, vy: (cy - st.y) * 2 - 500 - hash(sd + 1) * 800, av: (hash(sd + 2) - .5) * 16 });
+  });
+  const res = { fr, lw: LW * st.S }; FRAG.set(g, res); return res;
+}
+function drawGlyph(g, t) {
+  if (t < g.vis[0]) return;
+  if (g.shat !== undefined && t >= g.shat) {
+    const dt = t - g.shat; if (dt > 1) return;
+    const { fr, lw } = fragments(g); ctx.globalAlpha = Math.pow(1 - dt, 1.5); ctx.lineWidth = lw * (1 - dt * .4);
+    ctx.beginPath();
+    for (const f of fr) {
+      const ox = f.vx * dt, oy = f.vy * dt + 1900 * dt * dt, a = f.av * dt, c = Math.cos(a), s = Math.sin(a);
+      if (f.dot) { ctx.moveTo(f.cx + ox + f.dot, f.cy + oy); ctx.arc(f.cx + ox, f.cy + oy, f.dot, 0, TAU); continue; }
+      f.pts.forEach((p, i) => { const px = p[0] - f.cx, py = p[1] - f.cy, X = f.cx + ox + px * c - py * s, Y = f.cy + oy + px * s + py * c; i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); });
+    }
+    ctx.stroke(); ctx.globalAlpha = 1; return;
+  }
+  if (t >= g.vis[1]) return;
+  const st = gState(g, t);
+  if (g.poof !== undefined && t >= g.poof) { const p = (t - g.poof) / .25; if (p >= 1) return; st.S *= 1 - E.in(p); }
+  if (st.S < 1) return;
+  const X = xform(st, t, g);
+  if (g.ch === '.') { const [cx, cy] = X([0, 0]); ctx.beginPath(); ctx.arc(cx, cy, .075 * st.S, 0, TAU); ctx.fill(); return; }
+  strokePolys(unitPolys(g, st).map(p => p.map(X)), LW * st.S * Math.sqrt(Math.abs(st.sx * st.sy)), st.prog);
+  // hızlı giderken hız çizgileri
+  const v = (g.path.at(t + .02)[0] - g.path.at(t - .02)[0]) / .04;
+  if (Math.abs(v) > 900 && !g.noSpeed) {
+    const dir = -Math.sign(v), n = 4, len = Math.min(1, (Math.abs(v) - 900) / 1500) * st.S * .9;
+    ctx.save(); ctx.lineWidth = Math.max(4, st.S * .02); ctx.globalAlpha = .55; ctx.beginPath();
+    for (let i = 0; i < n; i++) {
+      const yy = st.y - st.S * .35 + st.S * .7 * (i + .5) / n + vnoise(i * 7 + t * 9) * 8, x0 = st.x + dir * st.S * (.42 + hash(i + Math.floor(t * 12)) * .15);
+      ctx.moveTo(x0, yy); ctx.lineTo(x0 + dir * len * (.6 + hash(i * 3) * .6), yy);
+    }
+    ctx.stroke(); ctx.restore();
+  }
+  // öfke buharı
+  const tr = val(g.trem, t);
+  if (tr > .5) {
+    ctx.save(); ctx.lineWidth = 5; ctx.globalAlpha = 1;
+    for (let k = 0; k < 2; k++) {
+      const age = (t * 1.7 + k * .5 + g.id * .3) % 1, side = k ? 1 : -1;
+      const px = st.x + side * (25 + age * 40), py = st.y - st.S / 2 - 20 - age * 110, r = 8 + age * 16;
+      ctx.globalAlpha = (1 - age) * (tr - .5) * 2; ctx.beginPath(); ctx.arc(px, py, r, PI * .9, PI * 2.3); ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
+/* ---------- Sahne nesneleri ---------- */
+// 1-A: tepeden düşen 1
+const gA = G({ ch: '1', vis: [0.5, 99], shat: 10.55, gnd: true,
+  path: new Path(-30, -1500).to(0.55, 0.95, -30, -375, 'lin', 'in').jump(0.95, 1.55, 220, -170, 300)
+    .jump(3.75, 4.0, 400, -170, 90).to(7.3, 7.7, 480, -170).to(8.25, 8.75, 10, -170, 'in', 'lin'),
+  rot: t => K([[0.95, 0], [1.55, TAU, 'out']])(t) + K([[6.3, 0], [6.6, -.1], [8.2, -.1], [8.3, -.22], [8.75, -.22], [8.8, 0, 'out']])(t),
+  rw: [[1.55, .12, 16, 5], [3.05, .07, 14, 4], [3.33, .1, 14, 4]],
+  trem: K([[3.55, 0], [3.7, 1], [4.0, .25], [6.3, .25], [6.5, 1], [8.25, 1], [8.3, 0]]),
+  bobs: [[7.3, 7.7, 25, 2], [8.25, 8.75, 45, 3]], sxw: [[8.75, -.18, 20, 6]], syw: [[1.55, -.12, 20, 6]] });
+// 1-B: bovling topu gibi yuvarlanan 1
+const gBx = t => { const p = gB.path.at(t); return p[0]; };
+const gBrot = t => t < 5.6 ? (gBx(t) + 1100) / 170 : K([[5.6, (-620 + 1100) / 170], [5.95, 0, 'back']])(t);
+const gB = G({ ch: '1', vis: [3.95, 99], shat: 10.55, gnd: true,
+  path: new Path(-1100, -170).to(4.0, 4.75, 60, -170, 'lin', 'lin').to(4.75, 5.6, -620, -170, 'out', 'lin')
+    .jump(6.0, 6.3, -540, -170, 80).to(7.3, 7.7, -650, -170).to(8.25, 8.75, -530, -170, 'in', 'lin'),
+  rot: t => gBrot(t) + K([[6.3, 0], [6.6, .1], [8.2, .1], [8.3, .22], [8.75, .22], [8.8, 0, 'out']])(t),
+  yfix: (t, x, y) => t >= 4.0 && t < 5.95 ? -(40 + 130 * Math.abs(Math.cos(gBrot(t)))) : y,
+  trem: K([[6.3, 0], [6.5, 1], [8.25, 1], [8.3, 0]]),
+  bobs: [[7.3, 7.7, 25, 2], [8.25, 8.75, 45, 3]], sxw: [[8.75, -.18, 20, 6]] });
+// + : yerde duran, kalkan olan, sonra × olan
+const oxP = K([[0, 0], [11.45, 0], [11.6, 35], [13.9, 35], [13.95, 10], [14.1, 10], [14.25, 35], [15.9, 35], [16.0, -25]]);
+const oyP = K([[0, -10], [7.6, -10], [7.75, -75], [11.45, -75], [11.6, 0], [13.9, 0], [13.95, -40], [14.1, -40], [14.25, 0], [15.9, 0], [16.0, -30]]);
+const holdP = t => hand(t, oxP(t), oyP(t));
+const gP = G({ ch: '+', vis: [0, 99], shat: 18.95,
+  path: new Path(-260, -97).jump(4.5, 4.72, -260, -97, 80)
+    .to(7.5, 7.6, holdP, undefined, 'out').follow(7.6, 8.42, holdP).to(8.42, 8.7, -260, -170, 'lin', 'in')
+    .jump(10.55, 11.0, holdP, undefined, 350).follow(11.0, 12.35, holdP).to(12.35, 12.42, 820, -170, 'out')
+    .to(13.9, 13.97, holdP, undefined, 'out').follow(13.97, 16.2, holdP).jump(16.2, 16.7, 1330, -170, 450),
+  rot: K([[0, .25], [4.5, .25], [4.72, .25 - TAU], [7.5, .25 - TAU], [7.65, -TAU], [15.65, -TAU], [15.85, -TAU + PI / 4, 'back'],
+    [16.2, -TAU + PI / 4], [16.7, -TAU + PI / 4 + 6 * PI, 'out'], [16.8, -TAU + PI / 4 + 6 * PI + .1, 'out']]),
+  rw: [[13.62, .12, 40, 3], [13.76, .12, 40, 3]] });
+// 1 + 1 = 2
+const gE1 = G({ ch: '=', vis: [8.9, 99], shat: 10.55, S: K([[8.9, 0], [9.05, 340, 'back']]), path: new Path(280, -170) });
+const S2a = K([[9.05, 0], [9.3, 340, 'back']]);
+const g2a = G({ ch: '2', vis: [9.05, 99], shat: 13.95, S: S2a, path: new Path(550, 0).follow(9.0, 99, t => [550, -S2a(t) / 2]), gnd: true, syw: [[9.7, -.08, 20, 6], [12.95, -.08, 20, 6]] });
+// 2 + 3 = 5
+const g3 = G({ ch: '3', vis: [11.5, 99], shat: 13.95, gnd: true, path: new Path(2000, -170).to(11.55, 12.35, 1090, -170, 'lin', 'lin'),
+  bobs: [[11.55, 12.35, 45, 5]], rot: K([[11.55, -.18], [12.3, -.18], [12.4, .12, 'out'], [12.6, 0]]), sxw: [[12.35, -.25, 22, 6]] });
+const gE2 = G({ ch: '=', vis: [12.55, 99], shat: 13.95, S: K([[12.55, 0], [12.7, 340, 'back']]), path: new Path(1360, -170) });
+const S5 = K([[12.75, 0], [13.0, 460, 'back']]);
+const g5 = G({ ch: '5', vis: [12.75, 99], poof: 24.9, S: S5, gnd: true,
+  path: new Path(1660, 0).follow(12.7, 14.1, t => [1660, -S5(t) / 2]).jump(14.1, 14.4, 1300, -230, 130).jump(14.5, 14.8, 1050, -230, 110)
+    .jump(19.3, 20.6, 4250, -230, 1400),
+  rot: t => K([[14.85, 0], [15.05, .18], [15.38, -.85, 'in'], [15.6, -.8], [15.95, 0, 'back']])(t) + K([[19.3, 0], [20.6, 2 * TAU, 'io']])(t),
+  pivB: t => t > 14.8 && t < 16.2 ? 1 : 0,
+  flag: K([[14.85, 0], [15.08, .45], [15.4, -2.6, 'in'], [15.55, -2.4, 'out'], [16.15, 0, 'io']]),
+  syw: [[13.0, -.1, 20, 6], [14.4, -.14, 20, 6], [14.8, -.14, 20, 6], [20.6, -.15, 20, 6]] });
+// 5 × 2 = 10
+const g2b = G({ ch: '2', vis: [16.1, 99], shat: 18.95, gnd: true, path: new Path(2500, -170).to(16.15, 16.75, 1590, -170, 'out3', 'lin'),
+  bobs: [[16.15, 16.75, 32, 4]], rot: K([[16.15, -.12], [16.7, -.12], [16.8, .1, 'out'], [17.0, 0]]), sxw: [[16.75, -.2, 22, 6]] });
+const gE3 = G({ ch: '=', vis: [16.9, 99], shat: 18.95, S: K([[16.9, 0], [17.05, 340, 'back']]), path: new Path(1850, -170) });
+const S10a = K([[17.1, 0], [17.35, 460, 'back'], [19.0, 460], [19.6, 1012, 'out3'], [22.1, 1012], [22.7, 560, 'io']]);
+const g10a = G({ ch: '1', vis: [17.1, 99], poof: 24.9, S: S10a, gnd: true,
+  path: new Path(2100, 0).follow(17.1, 20.4, t => [2200 - 110 * S10a(t) / 460, -S10a(t) / 2])
+    .jump(20.4, 20.85, 1900, -506, 120).jump(21.0, 21.4, 2050, -506, 220).jump(21.5, 21.9, 2300, -506, 220).jump(22.1, 22.7, 3340, -280, 520),
+  rot: K([[22.1, 0], [22.7, 0]]), syw: [[20.85, -.1, 20, 6], [21.4, -.1, 20, 6], [21.9, -.1, 20, 6], [22.7, -.15, 20, 6]] });
+const S10b = K([[17.1, 0], [17.35, 460, 'back'], [19.0, 460], [19.6, 1012, 'out3'], [22.5, 1012], [22.7, 560, 'out']]);
+const R0 = K([[20.0, 0], [20.3, .7], [22.5, .7], [22.7, 0]]);
+const X0 = K([[20.2, 2462], [22.5, 3315, 'in']]);
+const rot0 = t => t < 20.2 ? 0 : t < 22.5 ? (X0(t) - 2462) / 450 : (() => { const e = (3315 - 2462) / 450, tg = Math.round(e / PI) * PI; return lerp(e, tg, E.out(clamp((t - 22.5) / .2, 0, 1))); })();
+const g10b = G({ ch: '0', vis: [17.1, 99], poof: 24.9, S: S10b, round: R0, rot: rot0,
+  path: new Path(2320, 0).follow(17.1, 20.2, t => [2200 + 110 * S10b(t) / 460 + (t > 20 ? (t - 20) * 100 : 0), -S10b(t) / 2])
+    .follow(20.2, 22.5, t => { const S = S10b(t), rx = (.27 + .15 * R0(t)) * S, ry = h * S, a = rot0(t); return [X0(t), -(Math.hypot(rx * Math.sin(a), ry * Math.cos(a)) + LW * S / 2)]; })
+    .to(22.5, 22.7, 3630, -280, 'out') });
+// ÷ parçaları: "="'nin bir çubuğu + 0'dan kopan iki kırıntı
+const barHold = t => hand(t, 40, -10);
+const oxD = K([[26.75, 0], [26.95, 30]]), oyD = K([[26.75, -60], [26.95, -20]]);
+const divHold = t => hand(t, oxD(t), oyD(t));
+const SBar = K([[0, 340], [27.25, 340], [27.45, 180]]);
+const rotBar = K([[18.95, 0], [19.7, 2 * TAU, 'out'], [24.9, 2 * TAU], [26.75, 4 * TAU, 'out'], [27.0, 4 * TAU], [27.25, 4 * TAU + PI, 'back']]);
+const gM = G({ ch: '-', vis: [18.95, 99], S: SBar, rot: rotBar,
+  path: new Path(1850, -204).jump(18.95, 19.7, 3300, -22, 600).to(20.45, 20.52, barHold, undefined, 'out').follow(20.52, 21.7, barHold)
+    .to(21.7, 21.8, 3920, -170, 'out').jump(24.9, 26.75, divHold, undefined, 2200).follow(26.75, 27.3, divHold).to(27.3, 27.45, 5125, -175, 'out') });
+const dotPos = (t, i) => {
+  const loose = hand(t, 20 + i * 18, -34 - i * 16);
+  const bp = gM.path.at(t), a = rotBar(t), off = (i ? .2 : -.2) * SBar(t), exact = [bp[0] - Math.sin(a) * off, bp[1] + Math.cos(a) * off];
+  const p = E.out(clamp((t - 21.45) / .1, 0, 1)); return [lerp(loose[0], exact[0], p), lerp(loose[1], exact[1], p)];
+};
+const SDot = K([[0, 340], [27.85, 340], [28.1, 0, 'in']]);
+const gD = [0, 1].map(i => G({ ch: '.', vis: [20.0, 99], S: SDot, noSpeed: true,
+  path: new Path(2200, -800).to(20.0, 20.5, 2400 + i * 120, -2600, 'lin', 'out').set(20.5, 3500, -2600)
+    .to(20.5, 21.15 + i * .13, t => dotPos(t, i), undefined, 'lin', 'in').follow(21.15 + i * .13, 27.25, t => dotPos(t, i))
+    .jump(27.25, 27.85, 5105 + i * 40, -18, 450) }));
+// 10 ÷ 5 = 2
+const gE4 = G({ ch: '=', vis: [22.85, 99], poof: 24.9, S: K([[22.85, 0], [23.0, 340, 'back']]), path: new Path(4560, -170) });
+const S2c = K([[23.1, 0], [23.4, 900, 'back'], [25.0, 900], [25.4, 150, 'in3']]);
+const small2 = t => hand(t, 25, -20);
+const g2c = G({ ch: '2', vis: [23.1, 26.35], S: S2c, gnd: true, rot: K([[25.4, 0], [25.85, TAU, 'out']]),
+  path: new Path(4975, 0).follow(23.0, 25.4, t => [4975, -S2c(t) / 2]).jump(25.4, 25.85, small2, undefined, 220)
+    .follow(25.85, 26.0, small2).jump(26.0, 26.35, 5060, -170, 150), syw: [[24.5, -.06, 20, 6]] });
+// ½
+const h1a = G({ ch: '1', vis: [26.35, 99], S: 150, gnd: true, rot: K([[26.35, 0], [26.7, -TAU, 'out']]),
+  path: new Path(5060, -170).jump(26.35, 26.7, 4850, -75, 150).jump(27.7, 27.9, 4760, -75, 40).jump(27.9, 28.1, 4660, -75, 40)
+    .jump(28.1, 28.3, 4560, -75, 40).to(28.3, 28.8, 4150, -75, 'in', 'lin'), bobs: [[28.3, 28.8, 25, 3]], syw: [[26.7, -.2, 22, 6]] });
+const h1b = G({ ch: '1', vis: [26.35, 99], S: 150, gnd: true, rot: K([[26.35, 0], [26.7, TAU, 'out']]),
+  path: new Path(5060, -170).jump(26.35, 26.7, 5125, -75, 150).jump(27.3, 27.6, 5125, -264, 170),
+  syw: [[26.7, -.2, 22, 6], [27.6, -.25, 22, 6]], trem: K([[26.75, 0], [26.85, .6], [27.3, .6], [27.35, 0]]) });
+const gHalf2 = G({ ch: '2', vis: [27.85, 99], S: 150, prog: K([[27.85, 0], [28.2, 1, 'out']]), path: new Path(5125, -75) });
+
+/* ============================================================
+   EFEKTLER, SARSINTI, SES OLAYLARI
+   ============================================================ */
+const FX = [], SH = [], SND = [];
+const snd = (t, k, ...a) => SND.push([t, k, a]);
+const shake = (t, a, d = .35) => SH.push([t, a, d]);
+const burst = (t, x, y, r) => FX.push({ k: 'burst', t, x, y, r });
+const dust = (t, x, r = 80) => FX.push({ k: 'dust', t, x, y: 0, r });
+const flash = (t, a = .2) => FX.push({ k: 'flash', t, a });
+const ring = (t, x, y, r) => FX.push({ k: 'ring', t, x, y, r });
+const sparkle = (t, x, y) => FX.push({ k: 'spark', t, x, y });
+
+snd(0.55, 'whistle');
+snd(0.95, 'bonk'); burst(0.95, -40, -210, 130); shake(0.95, 16);
+snd(1.55, 'thud'); dust(1.55, 220); shake(1.55, 7);
+snd(1.95, 'pop');
+snd(3.05, 'boop', 1); snd(3.33, 'boop', 1.2);
+snd(3.7, 'growl');
+snd(4.0, 'roll', .75);
+snd(4.54, 'tick');
+snd(4.75, 'strike'); burst(4.75, 60, -90, 160); shake(4.75, 18); flash(4.75, .12);
+snd(5.35, 'thud'); dust(5.35, 150, 110); shake(5.35, 8);
+snd(6.3, 'pop', .8); snd(6.45, 'growl'); snd(6.65, 'growl', .8); dust(6.3, -540, 70);
+snd(7.1, 'whoosh');
+snd(7.6, 'tick');
+snd(7.95, 'jump');
+snd(8.7, 'tick');
+snd(8.75, 'impact'); burst(8.75, -260, -170, 230); shake(8.75, 24); flash(8.75, .22); dust(8.75, -390, 100); dust(8.75, 10, 100);
+snd(8.9, 'tick'); snd(8.95, 'land');
+snd(9.05, 'boom'); shake(9.05, 14, .5); dust(9.1, 550, 140);
+snd(9.2, 'jump'); snd(9.7, 'land');
+snd(10.0, 'ding'); ring(10.02, 560, -352 - 250 * SC, 120);
+snd(10.55, 'crack');
+snd(11.0, 'tick'); snd(11.45, 'land');
+for (let i = 1; i <= 5; i++) snd(11.55 + i * .16, 'step', .6 + i * .08);
+snd(12.35, 'impact'); burst(12.35, 900, -170, 230); shake(12.35, 24); flash(12.35, .22);
+snd(12.55, 'tick');
+snd(12.75, 'boom'); shake(12.75, 16, .5); dust(12.8, 1660, 160);
+snd(12.95, 'land'); snd(13.55, 'land'); snd(13.62, 'strain'); snd(13.9, 'tick'); snd(13.9, 'pop', 1.1); burst(13.9, 820, -170, 100);
+snd(13.95, 'crack');
+snd(14.4, 'heavy'); dust(14.4, 1300, 150); shake(14.4, 12);
+snd(14.8, 'heavy'); dust(14.8, 1050, 150); shake(14.8, 12);
+snd(15.25, 'whoosh', 1.3);
+snd(15.85, 'tick'); sparkle(15.85, 0, 0);
+snd(16.2, 'whoosh'); snd(16.2, 'whirr', .5);
+snd(16.7, 'thunk'); burst(16.7, 1330, -170, 140); shake(16.7, 10);
+snd(16.75, 'bump'); snd(16.9, 'tick');
+snd(17.1, 'boom'); shake(17.1, 14, .5); dust(17.15, 2200, 180);
+for (const [a, b] of [[17.35, 17.7], [17.78, 18.12], [18.2, 18.75]]) { snd(a, 'jump'); snd(b, 'land'); }
+snd(18.95, 'crack');
+snd(19.0, 'bigboom'); shake(19.0, 30, 1.1); dust(19.1, 2200, 400); flash(19.0, .1);
+snd(19.3, 'whoosh', .7); snd(19.7, 'tick');
+snd(20.0, 'crack'); burst(20.0, 2200, -800, 200); flash(20.0, .15); shake(20.0, 12);
+snd(20.2, 'roll', 2.3);
+snd(20.6, 'heavy'); dust(20.6, 4250, 160); shake(20.6, 10);
+for (const t of [20.85, 21.4, 21.9]) { snd(t, 'heavy', .8); shake(t, 10); }
+snd(20.5, 'tick'); snd(21.15, 'tick', 1.1); snd(21.28, 'tick', 1.25); snd(21.55, 'snap'); sparkle(21.55, 0, 0);
+snd(21.75, 'tick'); snd(21.85, 'whoosh');
+snd(22.5, 'impact'); snd(22.5, 'bigboom', .7); burst(22.5, 3825, -260, 380); shake(22.5, 34, .6); flash(22.5, .3); dust(22.5, 3500, 260);
+snd(22.7, 'heavy'); dust(22.7, 3340, 160);
+snd(22.85, 'tick');
+snd(23.1, 'bigboom'); shake(23.1, 22, .8); dust(23.15, 4975, 300);
+snd(24.5, 'land');
+snd(24.9, 'poof');
+snd(25.0, 'shrink');
+snd(25.55, 'land'); snd(25.85, 'tick');
+snd(26.35, 'chop'); burst(26.35, 5060, -170, 110); flash(26.35, .12); shake(26.35, 8);
+snd(26.7, 'boop', .9); snd(26.72, 'boop', 1.1); snd(26.75, 'tick');
+snd(27.25, 'tick'); snd(27.27, 'pop', 1.3);
+snd(27.6, 'tick'); snd(27.85, 'tick', 1.2); snd(28.2, 'tick', 1.4); sparkle(28.2, 5125, -170);
+snd(28.4, 'spin');
+snd(29.25, 'ding', 1.5); snd(29.25, 'shimmer');
+// Kırılma ve yok olma anlarına küçük efektler
+for (const g of GLY) if (g.poof !== undefined) { const [x, y] = g.path.at(g.poof); burst(g.poof, x, y, val(g.S, g.poof) * .45); }
+
+function drawFX(t) {
+  for (const f of FX) {
+    const dt = t - f.t; if (dt < 0) continue;
+    if (f.k === 'burst' && dt < .3) {
+      const p = dt / .3; ctx.save(); ctx.lineWidth = Math.max(3, f.r * .05) * (1 - p); ctx.beginPath();
+      for (let i = 0; i < 10; i++) { const a = i / 10 * TAU + hash(f.t + i) * .4, r0 = f.r * (.35 + p * .9), r1 = f.r * (.6 + p * 1.3); ctx.moveTo(f.x + Math.cos(a) * r0, f.y + Math.sin(a) * r0); ctx.lineTo(f.x + Math.cos(a) * r1, f.y + Math.sin(a) * r1); }
+      ctx.stroke(); ctx.restore();
+    } else if (f.k === 'dust' && dt < .5) {
+      const p = dt / .5; ctx.save(); ctx.globalAlpha = (1 - p) * .9; ctx.lineWidth = 4;
+      for (let s = -1; s <= 1; s += 2) for (let i = 0; i < 3; i++) {
+        const x = f.x + s * f.r * (.4 + p * (1 + i * .5)), y = -8 - i * 10 - p * 20, r = f.r * .12 * (1 + p) * (1 - i * .2);
+        ctx.beginPath(); ctx.arc(x, y, r, PI, TAU); ctx.stroke();
+      }
+      ctx.restore();
+    } else if (f.k === 'ring' && dt < .45) {
+      const p = dt / .45; ctx.save(); ctx.globalAlpha = 1 - p; ctx.lineWidth = 6 * (1 - p) + 1; ctx.beginPath(); ctx.arc(f.x, f.y, f.r * (.3 + p), 0, TAU); ctx.stroke(); ctx.restore();
+    } else if (f.k === 'spark' && dt < .4) {
+      const [x, y] = f.x ? [f.x, f.y] : (gP.vis[0] <= t && f.t < 16 ? gP.path.at(f.t) : gM.path.at(f.t)), p = dt / .4;
+      ctx.save(); ctx.lineWidth = 4; ctx.globalAlpha = 1 - p; ctx.beginPath();
+      for (let i = 0; i < 6; i++) { const a = i / 6 * TAU + .3, r0 = 60 + p * 60, r1 = r0 + 30; ctx.moveTo(x + Math.cos(a) * r0, y + Math.sin(a) * r0); ctx.lineTo(x + Math.cos(a) * r1, y + Math.sin(a) * r1); }
+      ctx.stroke(); ctx.restore();
+    }
+  }
+}
+
+/* ---------- Kamera ---------- */
+const CX = K([[0, 0], [3.9, 0], [4.5, -100], [6.7, -100], [7.3, -120], [8.5, 10], [10.5, 10], [11.3, 400], [12.0, 1150], [13.0, 1190], [13.9, 1190], [14.6, 880],
+  [15.9, 880], [16.6, 1150], [17.2, 1450], [17.7, 1650], [18.2, 1900], [18.9, 2300], [19.6, 2400], [20.2, 2750], [21.8, 3500], [22.5, 3800], [23.3, 4222],
+  [24.0, 4222], [24.6, 4700], [25.0, 4900], [25.7, 5040], [29.5, 5050]]);
+const CY = K([[0, -230], [3.9, -230], [4.5, -260], [7.3, -280], [8.5, -330], [11.3, -330], [13.9, -330], [14.6, -300], [15.9, -300], [16.6, -330],
+  [17.3, -360], [18.9, -400], [19.6, -520], [20.2, -480], [21.8, -450], [23.3, -450], [24.0, -450], [24.6, -650], [25.0, -600], [25.7, -200], [29.5, -200]]);
+const CZ = K([[0, 1.35], [3.9, 1.35], [4.5, 1.0], [6.7, 1.0], [7.3, .92], [8.5, .74], [10.5, .74], [11.3, .8], [12.0, .74], [13.9, .74], [14.6, .95],
+  [15.0, .95], [15.3, 1.05], [15.9, .95], [16.6, .75], [17.2, .52], [18.9, .56], [19.6, .48], [20.2, .5], [21.8, .52], [22.5, .5], [23.3, .48],
+  [24.0, .48], [24.6, .62], [25.0, .55], [25.7, 1.45], [29.5, 1.5]]);
+
+/* ---------- Nod çizimi ---------- */
+function drawNod(t) {
+  const n = nodAt(t), k = Math.floor(t * 12);
+  const j = (p, i) => [p[0] + (hash(k * 31 + i) - .5) * 2.4, p[1] + (hash(k * 17 + i * 5) - .5) * 2.4];
+  ctx.save(); ctx.strokeStyle = MINT; ctx.fillStyle = MINT; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.lineWidth = 7 * SC;
+  const curve = (a, c, b, i) => { const A = j(a, i), C = j(c, i + 1), B = j(b, i + 2); ctx.moveTo(A[0], A[1]); ctx.quadraticCurveTo(C[0], C[1], B[0], B[1]); };
+  ctx.beginPath();
+  curve(n.hip, n.clL, n.fL, 1); curve(n.hip, n.clR, n.fR, 4);
+  const hp = j(n.hip, 7), np = j(n.neck, 8); ctx.moveTo(hp[0], hp[1]); ctx.lineTo(np[0], np[1]);
+  curve(n.sh, n.caL, n.hL, 10); curve(n.sh, n.caR, n.hR, 13);
+  ctx.stroke();
+  // ayak ve el uçları
+  ctx.beginPath(); for (const p of [n.hL, n.hR]) { ctx.moveTo(p[0] + 5, p[1]); ctx.arc(p[0], p[1], 5, 0, TAU); } ctx.fill();
+  // kafa
+  const jh = j([0, 0], 20); ctx.beginPath(); n.head.forEach((p, i) => i ? ctx.lineTo(p[0] + jh[0], p[1] + jh[1]) : ctx.moveTo(p[0] + jh[0], p[1] + jh[1])); ctx.closePath();
+  ctx.fillStyle = '#000'; ctx.fill(); ctx.stroke();
+  // anten
+  ctx.beginPath(); ctx.moveTo(n.ab[0], n.ab[1]); ctx.quadraticCurveTo(n.ac[0], n.ac[1], n.at[0], n.at[1]); ctx.stroke();
+  const g = n.glow, r = 8 * SC * (1 + g * .45);
+  if (g > .01) {
+    const R = 90 * g, gr = ctx.createRadialGradient(n.at[0], n.at[1], 0, n.at[0], n.at[1], R);
+    gr.addColorStop(0, 'rgba(200,255,235,.9)'); gr.addColorStop(.35, 'rgba(62,224,168,.45)'); gr.addColorStop(1, 'rgba(62,224,168,0)');
+    ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(n.at[0], n.at[1], R, 0, TAU); ctx.fill();
+  }
+  ctx.shadowColor = MINT; ctx.shadowBlur = 12 + 40 * g; ctx.fillStyle = g > .3 ? '#e9fff6' : MINT;
+  ctx.beginPath(); ctx.arc(n.at[0], n.at[1], r, 0, TAU); ctx.fill();
+  ctx.restore();
+}
+
+/* ---------- Kare ---------- */
+function draw(t) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+  if (t >= CUT) return;
+  let sx = 0, sy = 0;
+  SH.forEach(([t0, a, d], i) => { const p = (t - t0) / d; if (p > 0 && p < 1) { const m = a * (1 - p) * (1 - p); sx += vnoise(t * 42 + i * 13) * m; sy += vnoise(t * 39 + i * 7 + 50) * m; } });
+  const z = CZ(t);
+  ctx.setTransform(z, 0, 0, z, W / 2 - CX(t) * z + sx, H / 2 - CY(t) * z + sy);
+  ctx.strokeStyle = '#fff'; ctx.fillStyle = '#fff'; ctx.lineCap = 'square'; ctx.lineJoin = 'miter'; ctx.miterLimit = 2.2;
+  for (const g of GLY) drawGlyph(g, t);
+  ctx.lineCap = 'round';
+  drawFX(t);
+  drawNod(t);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  for (const f of FX) if (f.k === 'flash') { const p = (t - f.t) / .12; if (p >= 0 && p < 1) { ctx.globalAlpha = f.a * (1 - p); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H); } }
+  if (t > 29.27) { ctx.globalAlpha = clamp((t - 29.27) / .23, 0, 1) * .55; ctx.fillStyle = '#c9ffe9'; ctx.fillRect(0, 0, W, H); }
+  ctx.globalAlpha = 1;
+}
+
+/* ============================================================
+   SES — sentez (Web Audio)
+   ============================================================ */
+let NB = null;
+function synth(ac, out) {
+  if (!NB || NB.sampleRate !== ac.sampleRate) { NB = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate); const d = NB.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
+  const tone = (t0, f, d, { type = 'sine', vol = .3, to = null, dest = out } = {}) => {
+    const o = ac.createOscillator(), g = ac.createGain(); o.type = type; o.frequency.setValueAtTime(f, t0);
+    if (to) o.frequency.exponentialRampToValueAtTime(to, t0 + d);
+    g.gain.setValueAtTime(.0001, t0); g.gain.exponentialRampToValueAtTime(vol, t0 + .006); g.gain.exponentialRampToValueAtTime(.0001, t0 + d);
+    o.connect(g); g.connect(dest); o.start(t0); o.stop(t0 + d + .05);
+  };
+  const noise = (t0, d, { vol = .3, f = 1000, to = null, q = 1, type = 'bandpass', dest = out } = {}) => {
+    const s = ac.createBufferSource(); s.buffer = NB; const fl = ac.createBiquadFilter(); fl.type = type; fl.Q.value = q;
+    fl.frequency.setValueAtTime(f, t0); if (to) fl.frequency.exponentialRampToValueAtTime(to, t0 + d);
+    const g = ac.createGain(); g.gain.setValueAtTime(.0001, t0); g.gain.exponentialRampToValueAtTime(vol, t0 + .008); g.gain.exponentialRampToValueAtTime(.0001, t0 + d);
+    s.connect(fl); fl.connect(g); g.connect(dest); s.start(t0, Math.random()); s.stop(t0 + d + .05);
+  };
+  const FXS = {
+    whistle: t => tone(t, 1700, .42, { vol: .07, to: 500 }),
+    bonk: t => { tone(t, 280, .28, { vol: .8, to: 70 }); tone(t, 560, .12, { type: 'square', vol: .06, to: 200 }); noise(t, .1, { vol: .5, f: 1800, type: 'lowpass' }); tone(t + .02, 330, .35, { type: 'triangle', vol: .15, to: 520 }); },
+    thud: t => { tone(t, 130, .25, { vol: .7, to: 45 }); noise(t, .15, { vol: .45, f: 450, type: 'lowpass' }); },
+    heavy: (t, v = 1) => { tone(t, 85, .55, { vol: .9 * v, to: 30 }); noise(t, .35, { vol: .55 * v, f: 320, type: 'lowpass' }); },
+    pop: (t, p = 1) => tone(t, 380 * p, .11, { vol: .3, to: 950 * p }),
+    boop: (t, p = 1) => tone(t, 520 * p, .1, { type: 'triangle', vol: .25, to: 760 * p }),
+    growl: (t, p = 1) => { noise(t, .55, { vol: .3, f: 180 * p, type: 'lowpass', q: 6 }); tone(t, 58 * p, .5, { type: 'sawtooth', vol: .06, to: 50 * p }); },
+    roll: (t, d) => { noise(t, d, { vol: .35, f: 240, to: 160, type: 'lowpass', q: 3 }); for (let x = 0; x < d; x += .09) tone(t + x, 90, .07, { vol: .18, to: 60 }); },
+    tick: (t, p = 1) => { tone(t, 2300 * p, .045, { vol: .16 }); tone(t, 3450 * p, .03, { vol: .05 }); },
+    strike: t => { noise(t, .55, { vol: .7, f: 2600, to: 700, q: .7 }); [880, 1170, 1460].forEach((f, i) => tone(t + i * .025, f, .16, { type: 'triangle', vol: .12 })); tone(t, 140, .3, { vol: .6, to: 50 }); },
+    whoosh: (t, p = 1) => noise(t, .26 * p, { vol: .5, f: 380, to: 3200, q: .8 }),
+    jump: t => tone(t, 300, .16, { vol: .14, to: 720 }),
+    impact: t => { tone(t, 160, .45, { vol: 1, to: 38 }); noise(t, .35, { vol: .7, f: 2500, to: 180, type: 'lowpass' }); tone(t, 68, .6, { type: 'triangle', vol: .45, to: 35 }); },
+    land: t => { noise(t, .1, { vol: .32, f: 320, type: 'lowpass' }); tone(t, 170, .1, { vol: .25, to: 80 }); },
+    step: (t, v = 1) => { tone(t, 120, .12, { vol: .4 * v, to: 55 }); noise(t, .08, { vol: .25 * v, f: 300, type: 'lowpass' }); },
+    boom: t => { tone(t, 92, 1.1, { vol: 1, to: 30 }); noise(t, .9, { vol: .45, f: 320, to: 50, type: 'lowpass' }); tone(t, 46, 1.3, { type: 'triangle', vol: .45, to: 28 }); },
+    bigboom: (t, v = 1) => { tone(t, 72, 2.0, { vol: v, to: 24 }); noise(t, 1.5, { vol: .55 * v, f: 520, to: 40, type: 'lowpass' }); tone(t, 38, 2.2, { type: 'triangle', vol: .55 * v, to: 22 }); },
+    ding: (t, p = 1) => { tone(t, 1318 * p, .9, { type: 'triangle', vol: .22 }); tone(t + .02, 1976 * p, .75, { vol: .1 }); tone(t + .03, 2637 * p, .5, { vol: .05 }); },
+    shimmer: t => [0, 4, 7, 12, 16, 19].forEach((s, i) => tone(t + i * .035, 1046 * Math.pow(2, s / 12), .5, { type: 'triangle', vol: .06 })),
+    crack: t => { noise(t, .22, { vol: .55, f: 2400, type: 'highpass' }); for (let i = 0; i < 5; i++) noise(t + i * .03, .04, { vol: .4, f: 3000 + i * 400, q: 4 }); tone(t, 1300, .08, { type: 'square', vol: .04, to: 300 }); },
+    strain: t => tone(t, 190, .3, { type: 'sawtooth', vol: .035, to: 240 }),
+    whirr: (t, d) => { for (let x = 0; x < d; x += .06) noise(t + x, .05, { vol: .22, f: 1700, q: 5 }); },
+    thunk: t => { tone(t, 230, .14, { vol: .7, to: 85 }); noise(t, .06, { vol: .45, f: 1600, q: 2 }); },
+    bump: t => { tone(t, 150, .14, { vol: .4, to: 70 }); },
+    snap: t => { tone(t, 1800, .05, { vol: .15 }); tone(t + .04, 2700, .08, { vol: .12 }); tone(t + .08, 3600, .12, { type: 'triangle', vol: .07 }); },
+    poof: t => noise(t, .32, { vol: .35, f: 700, to: 3200, q: 1.2 }),
+    shrink: t => { tone(t, 110, .42, { vol: .4, to: 680 }); noise(t, .4, { vol: .25, f: 3000, to: 500, q: 1 }); },
+    chop: t => { noise(t, .09, { vol: .7, f: 3200, type: 'highpass' }); tone(t, 1100, .1, { type: 'square', vol: .08, to: 220 }); tone(t, 150, .2, { vol: .5, to: 60 }); },
+    spin: t => noise(t, .85, { vol: .28, f: 500, to: 2600, q: 3 }),
+  };
+  return { tone, noise, FXS };
+}
+const BPM = 120, BEAT = 60 / BPM;
+function scheduleAll(ac, base, from = 0) {
+  const master = ac.createGain(); master.gain.value = .7; master.connect(ac.destination);
+  const music = ac.createGain(); music.gain.value = .75; music.connect(master);
+  const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2600; lp.connect(music);
+  const sfx = synth(ac, master), mus = synth(ac, lp);
+  for (const [t, k, a] of SND) if (t >= from) sfx.FXS[k](base + t - from, ...a);
+  // Hafif synth ritmi: Am – F – C – G
+  const roots = [110, 87.31, 130.81, 98], chords = [[0, 3, 7], [0, 4, 7], [0, 4, 7], [0, 4, 7]];
+  for (let i = 0; i * BEAT / 2 < CUT; i++) {
+    const t = i * BEAT / 2; if (t < from) continue;
+    const at = base + t - from, bar = Math.floor(t / (BEAT * 4)) % 4, root = roots[bar], beat8 = i % 8;
+    if (i % 2 === 0 && t >= 2) mus.tone(at, 150, .18, { vol: .55, to: 42 });
+    if (i % 2 === 1) mus.noise(at, .035, { vol: .1, f: 8000, type: 'highpass' });
+    if (t >= 4 && (beat8 === 0 || beat8 === 3 || beat8 === 6)) mus.tone(at, root / 2, .3, { type: 'triangle', vol: .3 });
+    const ch = chords[bar]; for (let s = 0; s < 2; s++) {
+      const st = ch[(i * 2 + s) % 3] + 12 * ((i >> 1) % 2);
+      mus.tone(at + s * BEAT / 4, root * 4 * Math.pow(2, st / 12), .12, { type: 'triangle', vol: t < 4 ? .035 : .055 });
+    }
+  }
+  return master;
+}
+
+/* ---------- Oynatıcı ---------- */
+const QS = new URLSearchParams(location.search), RENDER = QS.has('render');
+let playing = false, t0 = 0, AC = null, outNode = null, muted = false, tNow = 0;
+function play() {
+  if (!AC) try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { AC = null; }
+  if (outNode) { try { outNode.disconnect(); } catch (e) { } outNode = null; }
+  if (AC) { AC.resume(); if (!muted) outNode = scheduleAll(AC, AC.currentTime + .05); }
+  t0 = performance.now() + 50; playing = true; document.getElementById('play').textContent = '↺ Replay';
+}
+document.getElementById('play').onclick = play;
+cv.onclick = play;
+document.getElementById('mute').onclick = e => { muted = !muted; e.target.textContent = muted ? '🔇 Sound: off' : '🔊 Sound: on'; if (outNode) outNode.gain.value = muted ? 0 : .7; };
+if (!RENDER) {
+  const loop = () => { if (playing) { tNow = (performance.now() - t0) / 1000; if (tNow >= DUR) playing = false; } draw(Math.max(0, tNow)); requestAnimationFrame(loop); };
+  tNow = 0.3; requestAnimationFrame(loop);
+}
+
+/* ---------- Render API (tools/render-shorts.js) ---------- */
+let RF = 0;
+window.R_fps = FPS; window.R_frames = DUR * FPS;
+window.R_frame = i => { draw(i / FPS); return cv.toDataURL('image/jpeg', .93); };
+window.R_png = s => { draw(s); return cv.toDataURL('image/png'); };
+window.R_audio = async () => {
+  const sr = 48000, oc = new OfflineAudioContext(2, DUR * sr, sr); scheduleAll(oc, 0);
+  const buf = await oc.startRendering(), n = buf.length, dv = new DataView(new ArrayBuffer(44 + n * 4));
+  const ws = (o, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
+  ws(0, 'RIFF'); dv.setUint32(4, 36 + n * 4, true); ws(8, 'WAVE'); ws(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 2, true);
+  dv.setUint32(24, sr, true); dv.setUint32(28, sr * 4, true); dv.setUint16(32, 4, true); dv.setUint16(34, 16, true); ws(36, 'data'); dv.setUint32(40, n * 4, true);
+  const L = buf.getChannelData(0), R = buf.getChannelData(1); let o = 44;
+  for (let i = 0; i < n; i++) { const cut = i / sr >= CUT ? 0 : 1; dv.setInt16(o, clamp(L[i] * cut, -1, 1) * 32767, true); dv.setInt16(o + 2, clamp(R[i] * cut, -1, 1) * 32767, true); o += 4; }
+  const u8 = new Uint8Array(dv.buffer); let bin = '';
+  for (let i = 0; i < u8.length; i += 0x8000) bin += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+  return btoa(bin);
+};
+</script>
+</body>
+</html>

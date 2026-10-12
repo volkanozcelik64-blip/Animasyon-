@@ -56,3 +56,22 @@ Efektler: darbede donma, RGB ayrışması, darbe çizgileri, flaş ve renk ters 
 ```bash
 NODE_PATH=$(npm root -g) node tools/render-video.js $PWD/video2.html $PWD/video/sayilarin-sihri.mp4      # yatay 1920×1080 (dikey için sona 1 ekle)
 ```
+
+## Video 3: Nod vs Numbers (`nod-shorts.html`)
+
+30 saniyelik dikey (9:16) YouTube Shorts animasyonu, 1080×1920, 24 fps, konuşmasız. Saf siyah zemin; nane yeşili (#3EE0A8) yüzsüz, yuvarlak kare kafalı, tek antenli Nod
+duygularını yalnızca anteni ve duruşuyla gösterir. Rakamlar ve semboller beyaz, sade sans-serif çizgilerdir ve ağır fiziksel nesneler gibi davranır.
+Hazır video: [`video/nod-shorts.mp4`](video/nod-shorts.mp4).
+
+Akış: `1` kafasına düşer → ikinci `1` bovling topu gibi yuvarlanır, iki `1` öfkeyle saldırır → Nod `+`'yı aralarına bırakır: `1 + 1 = 2` (anten parlar) →
+`+` kalkan olur, koşan `3` çarpar: `2 + 3 = 5` → koca `5` bayrağını çekiç gibi savurur, Nod eğilir, `+`'yı 45° çevirip `×` yapar ve shuriken gibi fırlatır: `5 × 2 = 10` →
+`10` devleşir, `0` kopup tekerlek gibi kovalar, Nod `−` ve iki noktayı `÷` yapar, ayakta duran `5`'in önüne diker: `10 ÷ 5 = 2` →
+dev `2` küçülüp Nod'un eline düşer, karate darbesiyle iki `1`'e bölünür, `÷` kesir çizgisine döner: `½` → Nod tek ayak üstünde döner, anten parlar, siyah.
+
+Ses: çizgi film darbeleri, her sembolde yumuşak "tik", sayılar büyürken derin "bum", anten parlarken "ding", hafif synth ritmi (hepsi Web Audio ile sentezlenir).
+Her kare zamanın saf fonksiyonudur (`draw(t)`), bu yüzden render kare kare deterministiktir.
+
+```bash
+NODE_PATH=$(npm root -g) node tools/render-shorts.js nod-shorts.html video/nod-shorts.mp4
+NODE_PATH=$(npm root -g) node tools/render-shorts.js nod-shorts.html kareler --stills 1,9.9,23.6   # tek tek PNG kareler
+```
