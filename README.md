@@ -123,6 +123,7 @@ gizlenir ve gövde kafadan yere inen iki çizgi olarak görünür.
   - `Karsilastirma` — 6 sn: referans ile SVG ızgara arasında kayan perde.
   - `YanYana` — her duygu için solda görselden kesilen PNG, sağda SVG.
   - `Karakter-<duygu>` — tek karakter, idle animasyonuyla (1080×1080).
+  - `HareketOrnekleri` — yuru, otur → kalk, zipla, zipla → zipla yan yana (1920×1080).
 - **Poz:** `poz` prop'u duygunun pozunun üstüne yazar (`kolSol: [omuz, dirsek]`, `bacakSag: [kalça, diz]`,
   `kafaEgim`, `govdeEgim`, `ziplama`, `bakisX/Y`, `kolGorunurSol/Sag`). `kolIK('sag', x, y)` eli bir noktaya götürür.
 - **Geçiş:** `onceki` + `gecis` (0→1): açılar karışır, yüzler çapraz geçer — sert değişim yok.
@@ -134,6 +135,34 @@ gizlenir ve gövde kafadan yere inen iki çizgi olarak görünür.
 - **Yüz geçişi:** kaşlar biçim olarak dönüşür, gözler geçişin ortasında bir kırpmanın arkasında değişir,
   ağız küçülerek söner/büyüyerek belirir, yüz rengi ve süsler çapraz geçer.
 - `kirpma` (0..1) ek göz kırpma; `zaman` varsayılan olarak `useCurrentFrame()`.
+
+#### Hareket sistemi — `hareket`, `baslangic`, `hareketler`
+
+```tsx
+<Karakter duygu="mutlu" hareket="zipla" baslangic={30} />
+<Karakter duygu="gulen" hareketler={[
+  {hareket: 'yuru', baslangic: 0, x: -300, mesafe: 300, sure: 66},
+  {hareket: 'otur', baslangic: 72},
+  {hareket: 'kalk', baslangic: 200},
+  {hareket: 'zipla', baslangic: 222},
+]} />
+```
+
+Karakter kalça + diz (bacak IK) ve omuz + dirsek (kol açıları) noktalarından döner (`src/Karakter/hareketler.ts`):
+
+- **yuru** — önden görünüşte yan adım; kollar ve bacaklar karşılıklı sallanır. `mesafe` (birim, − sola), `sure`.
+- **otur** — önce hafifçe doğrulur, dizler bükülür, gövde sandalyeye iner, değince basılır; kollar
+  dengelemek için açılıp bırakılır. Sandalye (basit çizgi) oturulan yerde otomatik çizilir (`sandalye` ile aç/kapa).
+- **kalk** — öne eğilir (kafa iner, bakış aşağı, gövde basılır), sonra itip yukarı uzar ve yerleşir.
+- **zipla** — çömelir, kollar aşağı-geri → fırlar, kollar kalkar → kavisli uçuş, havada ayaklar toplanır
+  ve gölge küçülür → inişte basılır, durur. `yukseklik`.
+- **dur** — yerinde durur (oturuyorsa oturmaya devam eder).
+
+Hareketler birbirine geçer: her hareket öncekinin bıraktığı gövde konumunu ve yerdeki ayakları
+devralır (ayaklar hiçbir geçişte kaymaz), kalça, basılma, eğim ve kollar kısa bir yayla karışır.
+Hareket kollarından duygu kollarına (`kolAgirlik`) yumuşak dönülür; örn. oturduktan sonra
+düşünceli duygusunun "çenede el" pozu görünür. `hareketDurumu(adimlar, kare, fps)` sahnenin de
+kafa/gövde konumunu bilmesi için dışa açıktır. Örnekler: `HareketOrnekleri` kompozisyonu.
 
 #### Hareket yardımcıları (`src/Karakter/hareket.ts`)
 
@@ -158,9 +187,9 @@ npm run duygu:test           # out/duygu-testi.mp4 (1080×1920, 10 sn animasyon 
 Bulut ortamında Remotion'un kendi Chrome'unu indirmek yerine
 `--browser-executable=/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell`.
 
-Test videosu (`DuyguTesti`, hazır çıktı `video/duygu-testi.mp4`): mutlu yan adımlarla girer (ayaklar
-kaymaz) → çömelip sevinçle zıplar, inişte basılır → hafif kalkıp tabureye oturur, düşünceli olur →
-fikir! ampul yanar, heyecanlı olur → basılıp kalkar → iki heyecanlı zıplama.
+Test videosu (`DuyguTesti`, hazır çıktı `video/duygu-testi.mp4`), yalnızca `hareketler` listesiyle:
+mutlu yürüyerek girer → sandalyeye oturur → düşünceli olur (düşünce balonu) → fikir! ampul yanar,
+heyecanlanır → öne eğilip kalkar → iki kez zıplar.
 
 Yazı tipleri: Patrick Hand ve PT Sans Narrow (SIL Open Font License), `assets/fonts/`.
 

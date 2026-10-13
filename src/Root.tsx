@@ -5,6 +5,7 @@ import {Karakter} from './Karakter/Karakter';
 import {DUYGU_LISTESI, Duygu} from './Karakter/pozlar';
 import {DuyguIzgarasi, Karsilastirma, Referans, YanYana} from './DuyguIzgarasi';
 import {DuyguTesti} from './DuyguTesti';
+import {HareketOrnekleri} from './HareketOrnekleri';
 import {Kagit} from './Kagit';
 import './font';
 
@@ -27,7 +28,10 @@ export const RemotionRoot: React.FC = () => (
     <Still id="YanYana" component={YanYana} width={1920} height={1080} />
     <Composition id="Karsilastirma" component={Karsilastirma} durationInFrames={180} fps={30} width={1920} height={1080} />
 
-    {/* Animasyon testi (dikey) */}
+    {/* Hareket sistemi: yuru / otur / kalk / zipla */}
+    <Composition id="HareketOrnekleri" component={HareketOrnekleri} durationInFrames={120} fps={30} width={1920} height={1080} />
+
+    {/* Animasyon testi (dikey): yürü → otur → düşünceli → kalk → heyecanlı → 2× zıpla */}
     <Composition id="DuyguTesti" component={DuyguTesti} durationInFrames={300} fps={30} width={1080} height={1920} />
 
     {DUYGU_LISTESI.map((d) => (

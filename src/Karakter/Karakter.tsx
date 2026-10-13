@@ -1,6 +1,7 @@
 import React, {useId} from 'react';
 import {Easing, useCurrentFrame, useVideoConfig} from 'remotion';
 import {bacakIK, kirpmaDegeri, nefes, sinirla} from './hareket';
+import {HareketAdi, HareketAdimi, SANDALYE_UST, hareketDurumu} from './hareketler';
 import {DUYGULAR, Duygu, ElTipi, Ekstra, GEO, Poz, Yuz as YuzTanimi, karistirPoz} from './pozlar';
 
 // Stil: siyah el çizimi kontur, beyaz dolgu, yanakta hafif pembe.
@@ -32,6 +33,14 @@ export type KarakterProps = {
   ezilme?: number;
   /** Verilirse bacaklar IK ile bu yer noktalarına basar (viewBox koordinatı) → ayak kaymaz. */
   ayaklar?: {sol: {x: number; y: number}; sag: {x: number; y: number}};
+  /** Tek hareket: yuru | otur | kalk | zipla | dur — `baslangic` karesinde başlar. */
+  hareket?: HareketAdi;
+  /** `hareket`in başladığı kare (varsayılan 0). */
+  baslangic?: number;
+  /** Sıralı hareketler; her biri öncekinin bıraktığı yerden devam eder (ayaklar kaymaz). */
+  hareketler?: HareketAdimi[];
+  /** Sandalyeyi çiz (varsayılan: hareketlerde `otur` varsa). */
+  sandalye?: boolean;
   /** El çizimi titrek çizgi (SVG displacement). */
   elCizimi?: boolean;
   width?: number | string;
@@ -608,6 +617,21 @@ const IKBacak: React.FC<{taraf: 'sol' | 'sag'; kalca: {x: number; y: number}; ay
 
 const PELVIS = {x: 120, y: GEO.govdeAlt};
 
+/** Basit çizgi sandalye (önden): arkalık, oturak, dört ayak. Karakterin arkasında çizilir. */
+const Sandalye: React.FC<{x: number}> = ({x}) => {
+  const u = SANDALYE_UST;
+  const z = GEO.zemin - 2;
+  return (
+    <g className="sandalye" transform={`translate(${p(x)} 0)`} fill="none" strokeWidth={3}>
+      <path d={`M88 ${u} L88 ${u - 50} Q120 ${u - 56} 152 ${u - 50} L152 ${u}`} />
+      <path d={`M90 ${u - 36} Q120 ${u - 40} 150 ${u - 36}`} strokeWidth={2.2} />
+      <path d={`M93 ${u} L93 ${z - 7} M147 ${u} L147 ${z - 7}`} strokeWidth={2.4} />
+      <path d={`M78 ${u + 4} L76 ${z} M162 ${u + 4} L164 ${z}`} />
+      <path d={`M76 ${u} Q120 ${u - 4} 164 ${u} L164 ${u + 6} Q120 ${u + 9} 76 ${u + 6} Z`} fill={BEYAZ} />
+    </g>
+  );
+};
+
 export const Karakter: React.FC<KarakterProps> = ({
   duygu,
   onceki,
@@ -617,9 +641,13 @@ export const Karakter: React.FC<KarakterProps> = ({
   zaman,
   idle = true,
   tohum = 'karakter',
-  govdeX = 0,
-  ezilme = 0,
-  ayaklar,
+  govdeX: govdeXProp,
+  ezilme: ezilmeProp,
+  ayaklar: ayaklarProp,
+  hareket,
+  baslangic = 0,
+  hareketler,
+  sandalye,
   elCizimi = true,
   width,
   height,
@@ -634,7 +662,31 @@ export const Karakter: React.FC<KarakterProps> = ({
   const once = onceki && onceki !== duygu ? DUYGULAR[onceki] : undefined;
   const g = once ? sinirla(gecis) : 1;
   const tabanPoz = once ? karistirPoz(once.poz, simdi.poz, g) : simdi.poz;
-  const poz: Poz = {...tabanPoz, ...pozEk};
+  let poz: Poz = {...tabanPoz, ...pozEk};
+
+  // hareket sistemi: kalça/diz (bacak IK), omuz/dirsek (kol açıları), gövde konumu ve basılma
+  const adimlar = hareketler ?? (hareket ? [{hareket, baslangic}] : undefined);
+  const hd = adimlar && adimlar.length ? hareketDurumu(adimlar, f, fps) : undefined;
+  const govdeX = govdeXProp ?? hd?.gx ?? 0;
+  const ezilme = ezilmeProp ?? hd?.ezilme ?? 0;
+  const ayaklar = ayaklarProp ?? (hd ? {sol: hd.ayaklar[0], sag: hd.ayaklar[1]} : undefined);
+  const oneEgim = hd?.oneEgim ?? 0;
+  if (hd) {
+    const w = hd.kolAgirlik;
+    const k = (a: [number, number], b: [number, number]): [number, number] => [a[0] + (b[0] - a[0]) * w, a[1] + (b[1] - a[1]) * w];
+    poz = {
+      ...poz,
+      ziplama: pozEk?.ziplama ?? hd.ziplama,
+      kolSol: k(poz.kolSol, hd.kolSol),
+      kolSag: k(poz.kolSag, hd.kolSag),
+      kolGorunurSol: Math.max(poz.kolGorunurSol, w),
+      kolGorunurSag: Math.max(poz.kolGorunurSag, w),
+      kafaEgim: poz.kafaEgim + hd.kafaEgim,
+      govdeEgim: poz.govdeEgim + hd.govdeEgim,
+      bakisY: poz.bakisY + 0.6 * oneEgim,
+    };
+  }
+  const sandalyeX = sandalye === false ? null : hd?.sandalyeX ?? (sandalye ? govdeX : null);
 
   // idle: nefes (gövde hafifçe uzar, omuzlar/kafa kalkar, kollar gecikmeli sallanır) + rastgele kırpma
   const nf = idle ? nefes(f, fps) : {deger: 0, kol: 0};
@@ -647,7 +699,7 @@ export const Karakter: React.FC<KarakterProps> = ({
   const sy = (1 + ezilme) * (1 + 0.022 * nf.deger);
   const sx = 1 / Math.sqrt(1 + ezilme);
   const govdeBoy = PELVIS.y - GEO.govdeUst;
-  const kafaKay = -(govdeBoy * (sy - 1)); // gövde uzarsa kafa yükselir
+  const kafaKay = -(govdeBoy * (sy - 1)) + 7 * oneEgim; // gövde uzarsa kafa yükselir; öne eğilince iner
   const omuzKay = -((PELVIS.y - GEO.omuzSol.y) * (sy - 1));
   const kafaSx = 1 + (sx - 1) * 0.5;
   const kafaSy = 1 + (sy - 1) * 0.5;
@@ -700,6 +752,12 @@ export const Karakter: React.FC<KarakterProps> = ({
           fill="#000"
           opacity={0.12 * golgeOlcek}
         />
+      )}
+
+      {sandalyeX !== null && (
+        <g filter={elCizimi ? `url(#${id}-el)` : undefined} stroke={MUREKKEP} strokeLinecap="round" strokeLinejoin="round">
+          <Sandalye x={sandalyeX} />
+        </g>
       )}
 
       <g
