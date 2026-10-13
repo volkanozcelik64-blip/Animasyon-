@@ -6,13 +6,16 @@
     "onizleme": "tsx scripts/onizleme.tsx",
     "studio": "remotion studio src/index.ts",
     "kareler": "tsx scripts/kareler.tsx",
-    "render:temel": "remotion render src/index.ts NodTemel video/nod-temel.mp4 --codec=h264 --browser-executable=/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell"
+    "render:temel": "remotion render src/index.ts NodTemel video/nod-temel.mp4 --codec=h264 --browser-executable=/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell --public-dir=assets",
+    "render:konusma": "remotion render src/index.ts NodKonusma video/nod-konusma.mp4 --codec=h264 --browser-executable=/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell --public-dir=assets",
+    "ses:analiz": "tsx scripts/ses-analiz.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "@remotion/cli": "^4.0.528",
+    "@remotion/media-utils": "^4.0.528",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "remotion": "^4.0.528"

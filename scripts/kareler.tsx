@@ -5,7 +5,12 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { chromium } from 'playwright-core';
 import fs from 'node:fs';
 import path from 'node:path';
-import { Sahne, GENISLIK, YUKSEKLIK } from '../src/sahneler/NodTemel';
+import * as Temel from '../src/sahneler/NodTemel';
+import * as Konusma from '../src/sahneler/NodKonusma';
+
+// SAHNE=konusma npx tsx scripts/kareler.tsx … → lip sync sahnesi
+const sahneler = { temel: Temel, konusma: Konusma } as const;
+const { Sahne, GENISLIK, YUKSEKLIK } = sahneler[(process.env.SAHNE as keyof typeof sahneler) ?? 'temel'] ?? Temel;
 
 const KOK = path.resolve(__dirname, '..');
 const kareler = (process.argv[2] ?? '10,30,50,80,92,104,122,140,170,186,197,222,252,264,284,296,305,316,327,337,346,359')

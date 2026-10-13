@@ -358,8 +358,10 @@ export const FIKIR_SURE = FIKIR_DURAKSAMA + 22;
  */
 export function fikir(k: number, temel: Poz): { poz: Poz; fikir: boolean; parlama: number; atkiUnlem: boolean } {
   const A = GORUNUS[temel.gorunus];
-  // el yüzün önünde ama yüzü kapatmadan: bilek omzun önünde-yukarısında, parmak tepeyi gösterir
-  const yukari: Kol = kolHedef(A.omuzX.sag, { x: A.omuzX.sag + 76, y: OMUZ_Y - 64 }, 176, 'isaret', true);
+  // el yüzü kapatmadan yukarıda: yandan bakışta omzun önünde-yukarısında; önden kafanın yanında (dışa doğru)
+  const yukari: Kol = temel.gorunus === 'on'
+    ? kolHedef(A.omuzX.sag, { x: A.omuzX.sag - 52, y: OMUZ_Y - 78 }, 186, 'isaret', true)
+    : kolHedef(A.omuzX.sag, { x: A.omuzX.sag + 76, y: OMUZ_Y - 64 }, 176, 'isaret', true);
   const h = k - FIKIR_DURAKSAMA;
   const once = h < 0 ? 0 : h < 5 ? -0.12 * yumusak(h / 5) : geriTepme(aralik(h, 5, 13));
   const sagKol = kolKar(temel.sagKol, yukari, sinirla(once, -0.12, 1.08));
