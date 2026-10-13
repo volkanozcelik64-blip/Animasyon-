@@ -17,10 +17,11 @@ import {YAZI} from './font';
 // Kollar ve kafa gecikmeli bir yay takipçisiyle izler (follow-through); hiçbir hareket doğrusal değil.
 
 const FPS = 30;
-const Z = 298; // ayak tabanı (viewBox birimi)
+const Z = GEO.zemin - 2; // ayak tabanı (viewBox birimi)
 const L = GEO.uyluk + GEO.baldir;
-const KALCA_DX = GEO.kalcaSag.x - 120; // 7
-const KALCA_Y0 = GEO.kalcaSol.y; // 196
+const KALCA_DX = GEO.kalcaSag.x - 120;
+const KALCA_Y0 = GEO.kalcaSol.y;
+const TABURE_UST = GEO.govdeAlt + 16; // oturunca gövde altı tabure üstüne iner
 
 const S = {
   yurumeBit: 70,
@@ -97,12 +98,12 @@ const tabanZiplama = (ayak: [Nokta, Nokta], gx: number) => {
   return KALCA_Y0 - hy;
 };
 
-// oturma / kalkma: kalça ofseti (yay toplamı). Tabure üstü y=236 → gövde altı (200) 36 birim iner.
+// oturma / kalkma: kalça ofseti (yay toplamı). Gövde altı tabure üstüne iner.
 const OTURMA: Anahtar[] = [
   {f: 0, deger: 0},
   {f: S.otur, deger: 3, yay: YAY.govde}, // anticipation: hafif kalk
-  {f: S.otur + 7, deger: -36, yay: YAY.oturma}, // tabureye çök
-  {f: S.kalk, deger: -40, yay: YAY.govde}, // anticipation: öne eğil, bas
+  {f: S.otur + 7, deger: GEO.govdeAlt - TABURE_UST, yay: YAY.oturma}, // tabureye çök
+  {f: S.kalk, deger: GEO.govdeAlt - TABURE_UST - 3, yay: YAY.govde}, // anticipation: öne eğil, bas
   {f: S.kalk + 7, deger: 0, yay: {damping: 12, stiffness: 150}}, // it ve kalk
 ];
 
@@ -141,7 +142,7 @@ export const durum = (f: number): Durum => {
   const zipla = taban + oturma + z.y;
   const kalcaY = KALCA_Y0 - zipla;
   // havadayken ayaklar kalçanın altında toplanır (tuck), yere değmeden önce açılır
-  const tuck = 30 * z.hava;
+  const tuck = 14 * z.hava;
   const ayak = yer.map((a, j) => {
     const kx = 120 + gx + (j === 0 ? -KALCA_DX : KALCA_DX);
     const dx = Math.abs(a.x - kx);
@@ -257,9 +258,8 @@ const Etiket: React.FC<{yazi: string; opak: number; y: number}> = ({yazi, opak, 
 
 const Tabure: React.FC = () => (
   <g stroke={MUREKKEP} strokeWidth={3.2} strokeLinejoin="round" strokeLinecap="round">
-    <path d="M86 244 L80 298 M154 244 L160 298" fill="none" />
-    <path d="M84 276 L156 276" fill="none" strokeWidth={2.4} />
-    <path d="M74 236 Q120 230 166 236 L166 246 Q120 250 74 246 Z" fill="#e8c79c" />
+    <path d={`M84 ${TABURE_UST + 6} L80 298 M156 ${TABURE_UST + 6} L160 298`} fill="none" />
+    <path d={`M72 ${TABURE_UST} Q120 ${TABURE_UST - 5} 168 ${TABURE_UST} L168 ${TABURE_UST + 8} Q120 ${TABURE_UST + 11} 72 ${TABURE_UST + 8} Z`} fill="#e8c79c" />
   </g>
 );
 

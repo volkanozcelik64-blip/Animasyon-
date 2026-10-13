@@ -6,7 +6,12 @@
   "scripts": {
     "studio": "remotion studio",
     "render": "remotion render Ana out/ana.mp4",
-    "still": "remotion still Ana out/ana.png"
+    "still": "remotion still Ana out/ana.png",
+    "duygu:izgara": "remotion still DuyguIzgarasi out/duygu-izgarasi.png",
+    "duygu:yanyana": "remotion still YanYana out/duygu-yanyana.png",
+    "duygu:karsilastirma": "remotion render Karsilastirma out/duygu-karsilastirma.mp4",
+    "duygu:test": "remotion render DuyguTesti out/duygu-testi.mp4",
+    "emotions:png": "python3 tools/slice-emotions.py"
   },
   "dependencies": {
     "@remotion/cli": "4.0.528",

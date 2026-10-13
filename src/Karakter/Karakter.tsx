@@ -1,7 +1,7 @@
 import React, {useId} from 'react';
 import {Easing, useCurrentFrame, useVideoConfig} from 'remotion';
 import {bacakIK, kirpmaDegeri, nefes, sinirla} from './hareket';
-import {DUYGULAR, Duygu, Ekstra, GEO, Poz, Yuz as YuzTanimi, karistirPoz} from './pozlar';
+import {DUYGULAR, Duygu, ElTipi, Ekstra, GEO, Poz, Yuz as YuzTanimi, karistirPoz} from './pozlar';
 
 // Stil: siyah el çizimi kontur, beyaz dolgu, yanakta hafif pembe.
 export const MUREKKEP = '#1d1b1b';
@@ -43,44 +43,114 @@ const p = (n: number) => n.toFixed(2);
 
 // ───────────────────────────── uzuvlar ─────────────────────────────
 
-/** Kol: omuzdan dirseğe, dirsekten ele; sağ taraf aynalanır. */
-const Kol: React.FC<{taraf: 'sol' | 'sag'; aci: [number, number]}> = ({taraf, aci}) => {
+/** El: yumruk (kıvrık), açık (parmaklı) ya da düz yuvarlak uç. Yerel uzayda ön kol +y yönünde. */
+const El: React.FC<{tip: ElTipi; y: number}> = ({tip, y}) => {
+  if (tip === 'yumruk')
+    return (
+      <g className="el">
+        <circle cx={0} cy={y + 2.5} r={4.8} fill={BEYAZ} strokeWidth={INCE} />
+        <path d={`M-2.6 ${p(y + 1.2)} q2.2 -2.2 4.4 0.4`} fill="none" strokeWidth={1.5} />
+      </g>
+    );
+  if (tip === 'acik')
+    return (
+      <g className="el">
+        {[-48, -16, 16, 48].map((a) => {
+          const r = (a * Math.PI) / 180;
+          return (
+            <path
+              key={a}
+              d={`M${p(Math.sin(r) * 2.5)} ${p(y + 3 + Math.cos(r) * 2.5)} l${p(Math.sin(r) * 5.5)} ${p(Math.cos(r) * 5.5)}`}
+              strokeWidth={2}
+            />
+          );
+        })}
+        <circle cx={0} cy={y + 2.6} r={3.6} fill={BEYAZ} strokeWidth={INCE} />
+      </g>
+    );
+  return <circle className="el" cx={0} cy={y + 1.6} r={3.3} fill={BEYAZ} strokeWidth={INCE} />;
+};
+
+/** Kol: omuzdan dirseğe (üst kol), dirsekten ele (ön kol); sağ taraf aynalanır. */
+const Kol: React.FC<{taraf: 'sol' | 'sag'; aci: [number, number]; el: ElTipi; gorunur: number}> = ({taraf, aci, el, gorunur}) => {
+  if (gorunur <= 0.01) return null;
   const o = taraf === 'sol' ? GEO.omuzSol : GEO.omuzSag;
   return (
-    <g className={`kol kol-${taraf}`} transform={`translate(${o.x} ${o.y}) scale(${taraf === 'sol' ? 1 : -1} 1)`}>
+    <g
+      className={`kol kol-${taraf}`}
+      opacity={gorunur}
+      transform={`translate(${o.x} ${o.y}) scale(${taraf === 'sol' ? 1 : -1} 1)`}
+    >
       <g className="ust-kol" transform={`rotate(${p(aci[0])})`}>
         <line x1={0} y1={0} x2={0} y2={GEO.ustKol} />
         <g className="on-kol" transform={`translate(0 ${GEO.ustKol}) rotate(${p(aci[1])})`}>
           <line x1={0} y1={0} x2={0} y2={GEO.onKol} />
-          <circle className="el" cx={0} cy={GEO.onKol + 1} r={5.2} fill={BEYAZ} strokeWidth={INCE} />
+          <El tip={el} y={GEO.onKol} />
         </g>
       </g>
     </g>
   );
 };
 
-/** Bacak: kalçadan dize, dizden ayağa; ayak dışa bakan kısa bir çizgi. */
+/** Bacak: kalçadan dize (üst bacak), dizden ayağa (alt bacak); ayak dışa kıvrık küçük bir uç. */
 const Bacak: React.FC<{taraf: 'sol' | 'sag'; aci: [number, number]}> = ({taraf, aci}) => {
   const k = taraf === 'sol' ? GEO.kalcaSol : GEO.kalcaSag;
   return (
     <g className={`bacak bacak-${taraf}`} transform={`translate(${k.x} ${k.y}) scale(${taraf === 'sol' ? 1 : -1} 1)`}>
-      <g className="uyluk" transform={`rotate(${p(aci[0])})`}>
+      <g className="ust-bacak" transform={`rotate(${p(aci[0])})`}>
         <line x1={0} y1={0} x2={0} y2={GEO.uyluk} />
-        <g className="baldir" transform={`translate(0 ${GEO.uyluk}) rotate(${p(aci[1])})`}>
-          <path d={`M0 0 L0 ${GEO.baldir} q-2 3 -8 3`} fill="none" />
+        <g className="alt-bacak" transform={`translate(0 ${GEO.uyluk}) rotate(${p(aci[1])})`}>
+          <path d={`M0 0 L0 ${GEO.baldir} q-1 3 -6 3`} fill="none" />
         </g>
       </g>
     </g>
   );
 };
 
+/** Gövde: dar tüp. Alt kenarı çizilmez → yanları bacaklarla tek çizgi gibi devam eder (görseldeki gibi). */
+const G1 = GEO.govdeUst + 10;
+const G2 = GEO.govdeUst + 20;
+const GOVDE_SOL = `M${GEO.omuzSol.x} ${GEO.govdeUst} C${GEO.omuzSol.x - 2} ${G1} ${GEO.kalcaSol.x} ${G2} ${GEO.kalcaSol.x} ${GEO.govdeAlt}`;
+const GOVDE_SAG = `M${GEO.omuzSag.x} ${GEO.govdeUst} C${GEO.omuzSag.x + 2} ${G1} ${GEO.kalcaSag.x} ${G2} ${GEO.kalcaSag.x} ${GEO.govdeAlt}`;
 const Govde: React.FC = () => (
-  <path
-    className="govde"
-    d="M107 122 C104 150 106 178 109 200 L131 200 C134 178 136 150 133 122 Z"
-    fill={BEYAZ}
-  />
+  <g className="govde">
+    <path
+      d={`${GOVDE_SOL} L${GEO.kalcaSag.x} ${GEO.govdeAlt} C${GEO.kalcaSag.x} ${G2} ${GEO.omuzSag.x + 2} ${G1} ${GEO.omuzSag.x} ${GEO.govdeUst} Z`}
+      fill={BEYAZ}
+      stroke="none"
+    />
+    <path d={GOVDE_SOL} fill="none" />
+    <path d={GOVDE_SAG} fill="none" />
+  </g>
 );
+
+/** Gövdeye bağlı ekler: palto (GİZEMLİ), ayak altı hareket çizgileri (HEYECANLI), iç çekme bulutları (HÜZÜNLÜ). */
+const GovdeEkleri: React.FC<{liste: Ekstra[]; opak: number; t: number}> = ({liste, opak, t}) => {
+  if (opak <= 0.001) return null;
+  const var_ = (e: Ekstra) => liste.includes(e);
+  return (
+    <g className="govde-ekleri" opacity={opak}>
+      {var_('palto') && (
+        <g transform={`translate(0 ${GEO.govdeUst}) scale(1 0.66) translate(0 -174)`}>
+          <path
+            d="M104 174 Q98 176 97 186 L92 246 Q120 252 148 246 L143 186 Q142 176 136 174 Q120 180 104 174 Z"
+            fill="#d8d4cc"
+            strokeWidth={2.8}
+          />
+          <path d="M108 175 L116 200 L112 204 L120 222 M132 175 L124 200 L128 204 L120 222" fill="none" strokeWidth={2} />
+          <path d="M116 200 L120 222 L124 200 Q120 194 116 200 Z" fill="#f4f2ee" strokeWidth={1.6} />
+          <path d="M120 222 L120 246 M101 214 L100 238 M139 214 L140 238" fill="none" strokeWidth={1.4} opacity={0.7} />
+        </g>
+      )}
+      {var_('hareketCizgileri') && (
+        <g fill="none" strokeWidth={1.8} opacity={0.85}>
+          <path d="M94 278 q-5 7 0 14 M86 281 q-4 5 0 10" />
+          <path d="M146 278 q5 7 0 14 M154 281 q4 5 0 10" />
+        </g>
+      )}
+    </g>
+  );
+};
 
 // ───────────────────────────── yüz ─────────────────────────────
 
@@ -131,9 +201,10 @@ const Goz: React.FC<{tip: YuzTanimi['goz']; x: number; bx: number; by: number; k
     case 'yarim':
       return (
         <g>
-          <path d={`M${x - 7} ${y - 1} A7 7 0 0 0 ${x + 7} ${y - 1} Z`} fill={MUREKKEP} stroke="none" />
-          <path d={`M${x - 9} ${y - 1.5} L${x + 9} ${y - 1.5}`} strokeWidth={2.6} />
-          <path d={`M${x - 7} ${y + 10} Q${x} ${y + 13} ${x + 7} ${y + 10}`} fill="none" strokeWidth={1.4} opacity={0.6} />
+          <path d={`M${x - 10} ${y - 1} Q${x} ${y + 11} ${x + 10} ${y - 1} Z`} fill={BEYAZ} strokeWidth={2} />
+          <path d={`M${x - 4.6 + bx * 2} ${y - 1} A4.6 4.6 0 0 0 ${x + 4.6 + bx * 2} ${y - 1} Z`} fill={MUREKKEP} stroke="none" />
+          <path d={`M${x - 11} ${y - 2} Q${x} ${y - 4} ${x + 11} ${y - 2}`} fill="none" strokeWidth={3} />
+          <path d={`M${x - 8} ${y + 11} Q${x} ${y + 15} ${x + 8} ${y + 11}`} fill="none" strokeWidth={1.4} opacity={0.65} />
         </g>
       );
     case 'sikili': {
@@ -249,6 +320,8 @@ const Agiz: React.FC<{tip: YuzTanimi['agiz']}> = ({tip}) => {
       return <path d="M-8 25 Q0 24 8 25.5" fill="none" strokeWidth={2.6} />;
     case 'sirit':
       return <path d="M-8 25 Q4 27 13 19" fill="none" strokeWidth={2.6} />;
+    case 'hmm':
+      return <path d="M2 27 Q6 24 11 26.5" fill="none" strokeWidth={2.6} />;
     case 'hirs':
       return (
         <g>
@@ -349,7 +422,7 @@ const Ekstralar: React.FC<{liste: Ekstra[]; t: number}> = ({liste, t}) => {
         </g>
       )}
       {var_('soru') && (
-        <g transform={`translate(44 ${-72 + dalga(0.5) * 2}) rotate(10)`} fill="none" strokeWidth={3}>
+        <g transform={`translate(52 ${p(-58 + dalga(0.5) * 2)}) rotate(10)`} fill="none" strokeWidth={3}>
           <path d="M-7 -6 Q-7 -16 1 -16 Q9 -16 9 -8 Q9 -2 2 1 Q0 3 0 8" />
           <circle cx={0} cy={15} r={1.6} fill={MUREKKEP} />
         </g>
@@ -361,7 +434,7 @@ const Ekstralar: React.FC<{liste: Ekstra[]; t: number}> = ({liste, t}) => {
           return (
             <path
               key={i}
-              transform={`translate(${36 + u * 22} ${-44 - u * 36}) scale(${s})`}
+              transform={`translate(${p(40 + u * 34)} ${p(-38 - u * 24)}) scale(${p(s)})`}
               d="M-6 -6 L6 -6 L-6 6 L6 6"
               fill="none"
               strokeWidth={2.6}
@@ -385,8 +458,8 @@ const Ekstralar: React.FC<{liste: Ekstra[]; t: number}> = ({liste, t}) => {
       )}
       {var_('buhar') && (
         <g>
-          <Bulut x={-66 - (dalga(1) + 1) * 2} y={4} s={0.9} />
-          <Bulut x={66 + (dalga(1, 1) + 1) * 2} y={-6} s={0.9} />
+          <Bulut x={-74 - (dalga(1) + 1) * 2} y={10} s={1.25} />
+          <Bulut x={74 + (dalga(1, 1) + 1) * 2} y={-4} s={1.25} />
         </g>
       )}
       {var_('ofke') && (
@@ -416,6 +489,13 @@ const Ekstralar: React.FC<{liste: Ekstra[]; t: number}> = ({liste, t}) => {
           <path d="M-66 -22 Q-30 -36 0 -34 Q30 -36 66 -24 Q40 -16 0 -18 Q-40 -16 -66 -22 Z" fill="#c9c6c0" strokeWidth={2.6} />
           <path d="M-36 -26 Q-38 -62 -12 -64 Q0 -56 12 -64 Q38 -62 36 -26 Q0 -20 -36 -26 Z" fill="#d9d6cf" strokeWidth={2.6} />
           <path d="M-35 -32 Q0 -26 35 -32 L35 -27 Q0 -21 -35 -27 Z" fill="#3b3a3a" strokeWidth={1.8} />
+        </g>
+      )}
+      {var_('ic') && (
+        <g fill="none" strokeWidth={1.7} opacity={0.85}>
+          <path d={`M${p(-56 - (t % 45) / 15)} 30 q-6 -3 -9 2 q-7 -1 -7 5 q4 4 10 1`} />
+          <path d={`M${p(56 + (t % 45) / 15)} 30 q6 -3 9 2 q7 -1 7 5 q-4 4 -10 1`} />
+          <path d="M-52 24 l-7 -3 M52 24 l7 -3" />
         </g>
       )}
       {var_('sevincCizgileri') && (
@@ -526,7 +606,7 @@ const IKBacak: React.FC<{taraf: 'sol' | 'sag'; kalca: {x: number; y: number}; ay
 
 // ───────────────────────────── karakter ─────────────────────────────
 
-const PELVIS = {x: 120, y: 198};
+const PELVIS = {x: 120, y: GEO.govdeAlt};
 
 export const Karakter: React.FC<KarakterProps> = ({
   duygu,
@@ -566,14 +646,15 @@ export const Karakter: React.FC<KarakterProps> = ({
   // squash & stretch hacmi koruyarak: sy·sx ≈ 1
   const sy = (1 + ezilme) * (1 + 0.022 * nf.deger);
   const sx = 1 / Math.sqrt(1 + ezilme);
-  const govdeBoy = PELVIS.y - 122;
+  const govdeBoy = PELVIS.y - GEO.govdeUst;
   const kafaKay = -(govdeBoy * (sy - 1)); // gövde uzarsa kafa yükselir
   const omuzKay = -((PELVIS.y - GEO.omuzSol.y) * (sy - 1));
   const kafaSx = 1 + (sx - 1) * 0.5;
   const kafaSy = 1 + (sy - 1) * 0.5;
 
+  const elTipi: ElTipi = (g < 0.5 && once ? once.yuz.eller : simdi.yuz.eller) ?? 'duz';
   const {kafa} = GEO;
-  const boyun = {x: 120, y: 124};
+  const boyun = GEO.boyun;
   const zipla = poz.ziplama;
   const golgeVar = simdi.yuz.ekstralar.includes('golge') || once?.yuz.ekstralar.includes('golge') || zipla > 1 || !!ayaklar;
   const golgeOlcek = Math.max(0.45, 1 - Math.max(0, zipla) / 90);
@@ -602,10 +683,11 @@ export const Karakter: React.FC<KarakterProps> = ({
           <stop offset="55%" stopColor="#a9c3e3" stopOpacity={0.35} />
           <stop offset="100%" stopColor="#dfe9f5" stopOpacity={0.1} />
         </linearGradient>
-        <radialGradient id={`${id}-mor`} cx="50%" cy="45%" r="60%">
-          <stop offset="0%" stopColor="#8a87a4" stopOpacity={0.75} />
-          <stop offset="100%" stopColor="#3f3b58" stopOpacity={0.95} />
-        </radialGradient>
+        <linearGradient id={`${id}-mor`} x1="0.3" y1="0" x2="0.5" y2="1">
+          <stop offset="0%" stopColor="#c9c8d6" stopOpacity={0.3} />
+          <stop offset="55%" stopColor="#77748f" stopOpacity={0.65} />
+          <stop offset="100%" stopColor="#3a3653" stopOpacity={0.92} />
+        </linearGradient>
       </defs>
 
       {golgeVar && (
@@ -646,6 +728,8 @@ export const Karakter: React.FC<KarakterProps> = ({
             <g transform={`translate(${PELVIS.x} ${PELVIS.y}) scale(${p(sx)} ${p(sy)}) translate(${-PELVIS.x} ${-PELVIS.y})`}>
               <Govde />
             </g>
+            {once && <GovdeEkleri liste={once.yuz.ekstralar} opak={1 - g} t={f} />}
+            <GovdeEkleri liste={simdi.yuz.ekstralar} opak={g} t={f} />
             <g className="kafa" transform={`translate(0 ${p(kafaKay)}) rotate(${p(poz.kafaEgim)} ${boyun.x} ${boyun.y})`}>
               <g transform={`translate(${kafa.x} ${kafa.y}) scale(${p(kafaSx)} ${p(kafaSy)})`}>
                 <circle cx={0} cy={0} r={kafa.r} fill={BEYAZ} />
@@ -654,10 +738,10 @@ export const Karakter: React.FC<KarakterProps> = ({
             </g>
             <g className="kollar" transform={`translate(0 ${p(omuzKay)})`}>
               <g transform={`translate(${p((GEO.omuzSol.x - PELVIS.x) * (sx - 1))} 0)`}>
-                <Kol taraf="sol" aci={kolSol} />
+                <Kol taraf="sol" aci={kolSol} el={elTipi} gorunur={poz.kolGorunurSol} />
               </g>
               <g transform={`translate(${p((GEO.omuzSag.x - PELVIS.x) * (sx - 1))} 0)`}>
-                <Kol taraf="sag" aci={kolSag} />
+                <Kol taraf="sag" aci={kolSag} el={elTipi} gorunur={poz.kolGorunurSag} />
               </g>
             </g>
           </g>

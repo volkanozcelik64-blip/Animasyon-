@@ -95,3 +95,76 @@ Sound (all synthesized with Web Audio): TV crowd roar, whoosh, formant-synth "SI
 NODE_PATH=$(npm root -g) node tools/render-shorts.js nod-siuuu.html video/nod-siuuu.mp4
 NODE_PATH=$(npm root -g) node tools/render-shorts.js nod-siuuu.html frames --stills 3.2,9.9,13.6   # single PNG frames
 ```
+
+## Remotion projesi (`src/`)
+
+Kök klasör bir Remotion projesidir (`npm install`, sonra `npm run studio` → http://localhost:3000).
+Varsayılan sahne `Ana` 1920×1080, 30 fps. Statik dosyalar `assets/` klasöründen sunulur
+(`staticFile('duygular.png')`, `staticFile('emotions/mutlu.png')`, `staticFile('fonts/…')`).
+
+### Duygular karakteri — `<Karakter duygu="mutlu" />`
+
+`assets/duygular.png`'deki çizgi karakterin React/SVG olarak yeniden çizimi (`src/Karakter/`):
+siyah el çizimi kontur, beyaz dolgu, yanakta hafif pembe, kızgın/kızarmış/üzgün/yorgun hallerinde
+yüz rengi; gözyaşı, ter, soru işareti, zZz, buhar, pırıltı, şapka, palto, termometre gibi ekler.
+Oranlar görseldeki gibidir: büyük kafa, kafanın altı ≈ 0.6 kafa çapı; pasif duruşlarda kollar
+gizlenir ve gövde kafadan yere inen iki çizgi olarak görünür.
+
+- **Ayrı parçalar:** kafa, gözler, kaşlar, ağız, yanaklar, gövde; her kolda üst kol / ön kol / el,
+  her bacakta üst bacak / alt bacak / ayak (`className` ile seçilebilir, her uzuv açı çiftiyle döner).
+- **22 duygu, her biri ayrı tanımlı** (`src/Karakter/pozlar.ts` → `DUYGULAR`): poz (iskelet açıları,
+  el hedefleri `kolIK` ile kafaya göre) + yüz (göz, kaş, ağız, yanak, yüz rengi, ekler, el biçimi).
+  `mutlu, cok-mutlu, heyecanli, gulen, sok-olmus, kizgin, somurtan, uzgun, aglayan, huzunlu,
+  hayal-kirikligi, hayal-kirikligi-2, utangac, kizarmis, mahcup, kafasi-karisik, dusunceli, yorgun,
+  hasta, uyuyan, sinirli, gizemli`. (Görselde 22 çizim var; HAYAL KIRIKLIĞI iki kez geçiyor.)
+- **Referansla karşılaştırma sahneleri:**
+  - `DuyguIzgarasi` — tüm duygular, görseldeki ızgarayla aynı konum ve kafa boyutunda (1920×1080).
+  - `Referans` — görselin kendisi aynı ölçekte; Studio'da ikisi arasında geçiş yaparak karşılaştır.
+  - `Karsilastirma` — 6 sn: referans ile SVG ızgara arasında kayan perde.
+  - `YanYana` — her duygu için solda görselden kesilen PNG, sağda SVG.
+  - `Karakter-<duygu>` — tek karakter, idle animasyonuyla (1080×1080).
+- **Poz:** `poz` prop'u duygunun pozunun üstüne yazar (`kolSol: [omuz, dirsek]`, `bacakSag: [kalça, diz]`,
+  `kafaEgim`, `govdeEgim`, `ziplama`, `bakisX/Y`, `kolGorunurSol/Sag`). `kolIK('sag', x, y)` eli bir noktaya götürür.
+- **Geçiş:** `onceki` + `gecis` (0→1): açılar karışır, yüzler çapraz geçer — sert değişim yok.
+- **Idle (varsayılan açık):** hafif nefes (gövde uzar, omuz/kafa kalkar, kollar gecikmeli sallanır) ve
+  `tohum`'a göre 3–5 sn'de bir rastgele göz kırpma (ara sıra çift). `idle={false}` ile kapatılır.
+- **Squash & stretch:** `ezilme` (+ uzama, − basılma); gövde hacmi korunur, kafa yarı oranda deforme olur.
+- **Ayaklar yere kilitli:** `ayaklar={{sol: {x, y}, sag: {x, y}}}` verilirse bacaklar 2 kemikli IK ile
+  bu noktalara basar; gövde `govdeX` ve `poz.ziplama` ile hareket ederken ayak yerinde kalır.
+- **Yüz geçişi:** kaşlar biçim olarak dönüşür, gözler geçişin ortasında bir kırpmanın arkasında değişir,
+  ağız küçülerek söner/büyüyerek belirir, yüz rengi ve süsler çapraz geçer.
+- `kirpma` (0..1) ek göz kırpma; `zaman` varsayılan olarak `useCurrentFrame()`.
+
+#### Hareket yardımcıları (`src/Karakter/hareket.ts`)
+
+- `yayToplami(anahtarlar, f, fps)` — her anahtar kendi `spring()`'ini başlatır, değişimler toplanır:
+  önceki yay bitmeden yeni hedef gelse de değer süreklidir (pop yok), yaylar hafif aşıp oturur.
+- `ziplamaEgrisi(t, fps, {hazirlik, havada, yukseklik, cokme})` — çömelme (anticipation, basılma) →
+  kalkışta uzama → parabolik (kavisli) uçuş → inişte darbe yayı ile basılma ve toparlanma.
+- `bacakIK`, `kalcaYuksekligi` — diz dışa kırılan bacak IK'sı ve ayakların izin verdiği en yüksek kalça.
+- `kirpmaDegeri`, `nefes` — idle; `takipci` — gecikmeli ikinci derece yay (follow-through).
+
+### Çalıştırma
+
+```bash
+npm install
+npm run studio               # Remotion Studio (önizleme)
+npm run duygu:izgara         # out/duygu-izgarasi.png
+npm run duygu:yanyana        # out/duygu-yanyana.png
+npm run duygu:karsilastirma  # out/duygu-karsilastirma.mp4
+npm run duygu:test           # out/duygu-testi.mp4 (1080×1920, 10 sn animasyon testi)
+```
+
+Bulut ortamında Remotion'un kendi Chrome'unu indirmek yerine
+`--browser-executable=/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell`.
+
+Test videosu (`DuyguTesti`, hazır çıktı `video/duygu-testi.mp4`): mutlu yan adımlarla girer (ayaklar
+kaymaz) → çömelip sevinçle zıplar, inişte basılır → hafif kalkıp tabureye oturur, düşünceli olur →
+fikir! ampul yanar, heyecanlı olur → basılıp kalkar → iki heyecanlı zıplama.
+
+Yazı tipleri: Patrick Hand ve PT Sans Narrow (SIL Open Font License), `assets/fonts/`.
+
+### PNG kesimleri
+
+`python3 tools/slice-emotions.py` referans görseli `assets/emotions/*.png` olarak şeffaf
+arka planla keser (kontur içindeki beyaz dolgu opak kalır).
