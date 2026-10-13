@@ -92,11 +92,11 @@ export const ISARET_EDEN: Poz = {
 export const DUYGU_POZLARI: Partial<Record<Duygu, Poz>> = {
   /** eli çenesinde: avuç çene-yanak çizgisinde kafaya değer, bükülü işaret parmağı yanakta (kafa konturunun
    *  içinde), diğer parmaklar yumruk, başparmak çenenin altında; dirsek aşağıda bükülü; kafa ~6° yatık.
-   *  İki kemikli çözüm: omuz (-30,-124) → bilek (-50,-139), dirsek (-72,-90); el 206°;
-   *  avuç merkezi (-38,-162), parmak ucu (-26,-205) (kafa merkezine 34 birim), başparmak ucu (-2,-165). */
+   *  İki kemikli çözüm (el 208°): avuç merkezi (-38,-161) çene çizgisinde; parmak boğumu (-34,-193) ve ucu (-22,-193)
+   *  kafa merkezine 49 / 43 birim (kontur 66 → içeride); başparmak ucu (-1,-162) çenenin altında. */
   dusunceli: {
     ...AYAKTA.on,
-    sagKol: { omuz: 50.3, dirsek: 153.5, bilek: 2.2, el: 'cene', ayna: true },
+    sagKol: { omuz: 48.1, dirsek: 154.2, bilek: 5.6, el: 'cene', ayna: true },
     kafaEgim: -6,
     atki: { a1: 0, a2: 0 },
   },

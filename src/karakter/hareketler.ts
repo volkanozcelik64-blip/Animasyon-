@@ -159,55 +159,66 @@ export function kalk(p: number): Poz {
 }
 
 // ---------------------------------------------------------------- zıplama (§7)
-export const ZIPLA_SURE = 34;
+export const ZIPLA = { comel: 8, itis: 12, inis: 31, sakin: 44, yukseklik: 150 } as const;
+export const ZIPLA_SURE = ZIPLA.sakin;
 
 /**
- * Ayakta zıpla (yandan): çömel → fırla (kollar yukarı, atkı savrulur) → tepede kısa asılı kal →
- * iniş (squash) → dengelen. k: 0 … ZIPLA_SURE. Dönüş: poz, havada (zeminden yükseklik),
- * ezilme (sx, sy; hacim korunur), gölge ölçeği.
+ * Ayakta zıpla (her görünüşte; izleyiciye dönük için 'ucdort' ya da 'on'):
+ * belirgin çömelme (8 kare: kalça iner, dizler bükülür, kollar geride) → fırlama (gerilme) →
+ * havada kollar V şeklinde yukarı açık, atkı yukarı savrulur, tepe ≥ 1 kafa boyu (150 birim) →
+ * iniş: gövde %10 basık, dizler bükülü → toparlanma. k: 0 … ZIPLA_SURE.
+ * Dönüş: poz, havada (zeminden yükseklik), ezilme (sx, sy; hacim korunur), atkiHavada (0 … 1).
  */
-export function zipla(k: number): { poz: Poz; havada: number; ezilme: { x: number; y: number } } {
-  const A = GORUNUS.yan;
-  const T = { comel: 7, itis: 11, tepe: 18, inis: 25, sakin: 34 };
-  let ky = KALCA_Y, havada = 0, sy = 1;
-  let kolA = 0; // 0 = yanlarda, -1 = geride, 1 = yukarıda
+export function zipla(k: number, gorunus: Poz['gorunus'] = 'ucdort'): {
+  poz: Poz; havada: number; ezilme: { x: number; y: number }; atkiHavada: number;
+} {
+  const A = GORUNUS[gorunus];
+  const T = ZIPLA;
+  let ky = KALCA_Y, havada = 0, sy = 1, kolA = 0, atkiHavada = 0;
   if (k < T.comel) {
     const t = yumusak(k / T.comel);
-    ky = KALCA_Y + 34 * t; kolA = -t; sy = 1 - 0.05 * t;
+    ky = KALCA_Y + 40 * t; kolA = -t; sy = 1 - 0.04 * t;
   } else if (k < T.itis) {
     const t = aralik(k, T.comel, T.itis);
-    ky = lerp(KALCA_Y + 34, KALCA_Y, cikis(t)); kolA = lerp(-1, 1, cikis(t)); sy = 1 + 0.08 * t;
-    havada = 10 * t * t;
+    ky = lerp(KALCA_Y + 40, KALCA_Y, cikis(t)); kolA = lerp(-1, 1, cikis(t)); sy = 1 + 0.08 * cikis(t);
   } else if (k < T.inis) {
-    // balistik kavis; tepede yavaşlar (asılı kalma)
+    // balistik kavis, tepede yavaşlar (asılı kalma)
     const t = aralik(k, T.itis, T.inis);
-    havada = 10 + 92 * Math.sin(Math.PI * t) ** 0.85 - 10 * t;
-    kolA = 1 - 0.25 * t;
-    sy = 1 + 0.07 * (1 - t) - 0.02 * t;
-    ky = KALCA_Y + 12 * Math.sin(Math.PI * t); // dizler havada hafif toplanır
+    havada = T.yukseklik * Math.sin(Math.PI * t) ** 0.8;
+    kolA = 1;
+    sy = 1 + 0.07 * (1 - t) * (t < 0.5 ? 1 : 0.4);
+    ky = KALCA_Y + 16 * Math.sin(Math.PI * t); // havada dizler hafif toplanır
+    atkiHavada = yumusak(aralik(t, 0.2, 0.55));
   } else {
+    // iniş: %10 basıklık + dizler bükülür, sonra toparlanır
     const t = aralik(k, T.inis, T.sakin);
-    const ez = Math.sin(Math.PI * aralik(k, T.inis, T.inis + 6));
-    sy = 1 - 0.11 * ez;
-    ky = KALCA_Y + 26 * ez * (1 - t);
-    kolA = lerp(0.75, 0, yumusak(t));
+    const ez = Math.sin(Math.PI * Math.min(1, aralik(k, T.inis, T.inis + 8)));
+    sy = 1 - 0.1 * ez;
+    ky = KALCA_Y + 34 * ez * (1 - 0.3 * t);
+    kolA = lerp(0.6, 0, yumusak(t));
+    atkiHavada = 1 - yumusak(aralik(k, T.inis, T.inis + 8));
   }
   const ayakY = BILEK_Y;
-  const sag = bacakIK({ x: A.kalcaX.sag, y: ky }, { x: A.kalcaX.sag + 4, y: ayakY });
-  const sol = bacakIK({ x: A.kalcaX.sol, y: ky }, { x: A.kalcaX.sol + 4, y: ayakY });
-  // kollar yukarı-ileri (yandan bakınca yüzü kapatmaz), çömelişte geriye
-  const kolOmuz = kolA >= 0 ? lerp(4, -128, kolA) : lerp(4, 38, -kolA);
+  const sag = bacakIK({ x: A.kalcaX.sag, y: ky }, { x: A.kalcaX.sag + 3, y: ayakY });
+  const sol = bacakIK({ x: A.kalcaX.sol, y: ky }, { x: A.kalcaX.sol + 3, y: ayakY });
+  // kollar: çömelirken geride, havada V (yakın kol bir yana, uzak kol öbür yana açılır)
+  const V = 148;
+  const kol = (taraf: 1 | -1, temel: Kol): Kol => {
+    const omuz = kolA >= 0 ? lerp(temel.omuz, taraf * V, kolA) : lerp(temel.omuz, 32, -kolA);
+    return { omuz, dirsek: -6 * taraf * Math.max(0, kolA), bilek: 0, el: kolA > 0.5 ? 'salla' : 'acik', ayna: taraf < 0 };
+  };
+  const temel = AYAKTA[gorunus];
   const poz: Poz = {
-    ...AYAKTA.yan,
+    ...temel,
     kok: { x: 0, y: ky },
-    egim: k < T.itis ? 14 * Math.sin(Math.PI * aralik(k, 0, T.itis)) : 0,
-    kafaEgim: k < T.comel ? -4 : 0,
-    sagKol: { omuz: kolOmuz, dirsek: -14 * Math.max(0, kolA), bilek: 0, el: kolA > 0.5 ? 'salla' : 'acik' },
-    solKol: { omuz: kolOmuz + 8, dirsek: -14 * Math.max(0, kolA), bilek: 0, el: kolA > 0.5 ? 'salla' : 'acik' },
+    egim: k < T.itis ? 5 * Math.sin(Math.PI * aralik(k, 0, T.itis)) : 0,
+    kafaEgim: k < T.comel ? -3 : 0,
+    sagKol: kol(1, temel.sagKol),
+    solKol: kol(-1, temel.solKol),
     sagBacak: { ...sag, ayak: 0 },
     solBacak: { ...sol, ayak: 0 },
   };
-  return { poz, havada, ezilme: { x: 1 / Math.sqrt(sy), y: sy } };
+  return { poz, havada, ezilme: { x: 1 / Math.sqrt(sy), y: sy }, atkiHavada };
 }
 
 // ---------------------------------------------------------------- idle (§5): nefes, göz kırpma, yaylanma
@@ -303,20 +314,23 @@ export function giris(k: number): { poz: Poz; kafaDonus: number; bas: number; ag
   return { poz: { ...temel, sagKol, solKol, kafaEgim: k >= 32 ? 4 * yumusak(aralik(k, 32, 38)) : 0 }, kafaDonus, bas, agiz };
 }
 
-export const FIKIR_SURE = 36;
+export const FIKIR_DURAKSAMA = 15; // ampul belirdikten sonra 0,5 sn
+export const FIKIR_SURE = FIKIR_DURAKSAMA + 22;
 
 /**
- * fikir: işaret parmağını kaldırır (küçük anticipation + overshoot), atkının ucu ünlem gibi dikleşir,
- * ampul belirir. temel: o anki poz (ayakta ya da oturan); yakın kol (sag) kalkar.
+ * fikir: önce ampul belirir (0–8, overshoot), 0,5 sn duraksama (Nod ampule bakar), sonra işaret parmağını
+ * kaldırır (küçük anticipation + overshoot) ve atkının ucu ünlem gibi dikleşir.
+ * temel: o anki poz (ayakta ya da oturan); yakın kol (sag) kalkar.
  */
-export function fikir(k: number, temel: Poz): { poz: Poz; fikir: boolean; parlama: number } {
+export function fikir(k: number, temel: Poz): { poz: Poz; fikir: boolean; parlama: number; atkiUnlem: boolean } {
   const A = GORUNUS[temel.gorunus];
   // el yüzün önünde ama yüzü kapatmadan: bilek omzun önünde-yukarısında, parmak tepeyi gösterir
   const yukari: Kol = kolHedef(A.omuzX.sag, { x: A.omuzX.sag + 76, y: OMUZ_Y - 64 }, 176, 'isaret', true);
-  const once = k < 5 ? -0.12 * yumusak(k / 5) : geriTepme(aralik(k, 5, 13));
+  const h = k - FIKIR_DURAKSAMA;
+  const once = h < 0 ? 0 : h < 5 ? -0.12 * yumusak(h / 5) : geriTepme(aralik(h, 5, 13));
   const sagKol = kolKar(temel.sagKol, yukari, sinirla(once, -0.12, 1.08));
-  const parlama = k < 8 ? 0 : geriTepme(aralik(k, 8, 16), 2.2);
-  return { poz: { ...temel, sagKol }, fikir: k >= 8, parlama };
+  const parlama = geriTepme(aralik(k, 0, 8), 2.2);
+  return { poz: { ...temel, sagKol }, fikir: true, parlama, atkiUnlem: h >= 7 };
 }
 
 export const ONAY_SURE = 16;

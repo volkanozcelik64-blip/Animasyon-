@@ -7,7 +7,7 @@ import type { Duygu } from './yuz';
 import type { GorunusAdi } from './olculer';
 import { ATKI } from './olculer';
 
-export type AtkiDurumAdi = Duygu | 'fikir';
+export type AtkiDurumAdi = Duygu | 'fikir' | 'havada';
 export interface Nokta { x: number; y: number }
 /** onde: uç kıvrımın ÖNÜNDE çizilir (yükselen biçimler); kökü küçük bir düğüm örter. */
 export interface AtkiSekli { kontrol: Nokta[]; genislik: number; onde?: boolean }
@@ -132,6 +132,12 @@ export function atkiSekli(d: AtkiDurumAdi, k: number, gorunus: GorunusAdi): Atki
       // yavaşça daireler çizer: uç bir daire üstünde döner
       const a = k * 0.07;
       return sekil(yoldan((s) => 30 * Math.sin(a) * s, L * (0.92 + 0.08 * Math.cos(a))), w);
+    }
+    case 'havada': // zıplarken yukarı savrulur, dalgalanır
+    {
+      // önce dışa, sonra kafanın yanından yukarı kıvrılır (yüzü örtmez), ucu dalgalanır
+      const phi = (s: number) => (s < 0.4 ? 100 + 20 * (s / 0.4) : 120 + 55 * ((s - 0.4) / 0.6));
+      return sekil(yoldan((s) => geri * phi(s) + 12 * s * Math.sin(k * 0.6 - s * 5), L * 1.7), w * 0.85, true);
     }
     case 'fikir': // ünlem gibi dikleşir
       return sekil(yoldan((s) => geri * (128 + 8 * s), L * 1.35), w * 0.8, true);

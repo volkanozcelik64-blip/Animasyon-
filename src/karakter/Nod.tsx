@@ -52,6 +52,10 @@ export interface NodProps {
   kafaDonus?: number;
   /** ampulün belirmesi 0 … 1 (fikir anı) */
   fikirParlama?: number;
+  /** fikir anında atkı ucu ünlem gibi dikleşsin (vars. fikir ile aynı) */
+  atkiUnlem?: boolean;
+  /** havadayken atkı ucu yukarı savrulur: 0 … 1 */
+  atkiHavada?: number;
   /** hata ayıklama: atkı ucunun bezier kontrol noktalarını göster */
   atkiKontrol?: boolean;
   /** çizgi kaynaması (§6): konturlar her 4 karede 1-2px değişir. Vars. açık. */
@@ -190,10 +194,12 @@ export const Nod: React.FC<NodProps> = (p) => {
 
   // atkı ucu: duygu biçimi (geçişte karışır) + follow-through salınımı; dünya dikeyine göre (egim telafisi)
   const tepki = p.atkiTepki ?? true;
-  const durum: AtkiDurumAdi = p.fikir ? 'fikir' : tepki ? duygu : 'notr';
-  const gecisVar = tepki && !p.fikir && p.oncekiDuygu && p.oncekiDuygu !== duygu && t < 1;
+  const unlem = p.atkiUnlem ?? !!p.fikir;
+  const durum: AtkiDurumAdi = unlem ? 'fikir' : tepki ? duygu : 'notr';
+  const gecisVar = tepki && !unlem && p.oncekiDuygu && p.oncekiDuygu !== duygu && t < 1;
   const sekil0 = atkiSekli(durum, kare, g);
-  const sekil1 = gecisVar ? atkiKaristir(atkiSekli(p.oncekiDuygu!, kare, g), sekil0, t) : sekil0;
+  const sekil1a = gecisVar ? atkiKaristir(atkiSekli(p.oncekiDuygu!, kare, g), sekil0, t) : sekil0;
+  const sekil1 = p.atkiHavada ? atkiKaristir(sekil1a, atkiSekli('havada', kare, g), p.atkiHavada) : sekil1a;
   // güçlü geriye savrulmada (yürüme/koşma) uç uzar ve dalgalanır
   const ruzgar = Math.max(0, Math.min(1, (Math.abs(poz.atki.a1) - 25) / 40));
   const uc = atkiSalinim(atkiRuzgar(sekil1, ruzgar, kare), poz.atki.a1 - poz.egim, poz.atki.a2);

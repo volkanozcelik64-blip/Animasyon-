@@ -1,4 +1,4 @@
-// 12 sn test: Nod soldan sekerek girer → giris → sandalyeye oturur → düşünceli → fikir → kalkıp heyecanla zıplar → onay.
+// 18 sn test: Nod soldan sekerek girer → giris → sandalyeye oturur → düşünceli → fikir → kalkıp heyecanla zıplar → onay.
 // 1920x1080, 30 fps (§11). Sahne saf bir fonksiyondur (kare → çizim); Remotion bileşeni yalnızca kareyi verir,
 // böylece önizleme PNG'leri ve video aynı kareleri çizer.
 import React from 'react';
@@ -9,7 +9,7 @@ import type { Duygu } from '../karakter/yuz';
 import { AtkiYayi, type AtkiDurumu } from '../karakter/atki';
 import {
   yuru, otur, kalk, zipla, giris, fikir, onay, nefes, gozKirp, yaylanma, ayaktaCok,
-  kolHedef, aralik, yumusak, OTURMA_ILERI, ZIPLA_SURE, GIRIS_SURE, FIKIR_SURE, ONAY_SURE, YURU,
+  aralik, yumusak, OTURMA_ILERI, ZIPLA_SURE, GIRIS_SURE, FIKIR_SURE, ONAY_SURE, YURU,
 } from '../karakter/hareketler';
 import { bilekNerede, yon } from '../karakter/ik';
 import { SandalyeArka, SandalyeOn } from '../esyalar/Sandalye';
@@ -17,7 +17,7 @@ import { SandalyeArka, SandalyeOn } from '../esyalar/Sandalye';
 export const GENISLIK = 1920;
 export const YUKSEKLIK = 1080;
 export const FPS = 30;
-export const SURE = 360;
+export const SURE = 540;
 
 const S = ekranOlcegi(YUKSEKLIK, 0.5); // ayakta ekranın %50'si
 const ZEMIN = 960; // ayak tabanı (px)
@@ -25,18 +25,30 @@ const CX = 820 / S; // sandalye (Nod birimi, dünya)
 const XS = CX - OTURMA_ILERI; // Nod'un sandalyenin önünde durduğu yer (kalça)
 const BASLA = -130; // yürüyüş başlangıcı (kalça, ekran dışı)
 
-// zaman çizelgesi (kare)
+// zaman çizelgesi (kare). Ana hareketler arasında 8 karelik nefes payı (poz tutulur, nefes + göz kırpma sürer).
+const NEFES = 8;
 const Z = {
-  yuru: [0, 90], don1: [90, 96], giris: [96, 96 + GIRIS_SURE], don2: [156, 162],
-  otur: [162, 198], dus: [198, 240], fikir: [240, 240 + FIKIR_SURE], kalk: [276, 300],
-  zipla: [300, 300 + ZIPLA_SURE], don3: [334, 340], onay: [340, 340 + ONAY_SURE],
+  yuru: [0, 90],
+  don1: [98, 104],
+  giris: [104, 104 + GIRIS_SURE], // 104–164
+  don2: [172, 178],
+  otur: [178, 214],
+  dus: [222, 300], // el çeneye 12 karede gelir, poz 2+ sn kalır; atkı ucu yavaşça daire çizer
+  fikir: [300, 300 + FIKIR_SURE], // ampul 300, 0,5 sn duraksama, parmak 315
+  kalk: [352, 382],
+  don3: [390, 394], // yan → 3/4 (izleyiciye dönük)
+  zipla1: [394, 394 + ZIPLA_SURE],
+  zipla2: [394 + ZIPLA_SURE + 4, 394 + 2 * ZIPLA_SURE + 4], // 442–486
+  don4: [494, 498], // 3/4 → önden
+  onay: [498, 498 + ONAY_SURE],
 } as const;
 
 const DUYGULAR: { kare: number; duygu: Duygu }[] = [
   { kare: 0, duygu: 'mutlu' },
-  { kare: 200, duygu: 'dusunceli' },
-  { kare: 246, duygu: 'heyecanli' },
-  { kare: 338, duygu: 'mutlu' },
+  { kare: 224, duygu: 'dusunceli' },
+  { kare: 300, duygu: 'sasirmis' },
+  { kare: 316, duygu: 'heyecanli' },
+  { kare: 496, duygu: 'mutlu' },
 ];
 
 export interface SahneKaresi {
@@ -51,6 +63,8 @@ export interface SahneKaresi {
   bak: Bakis;
   fikir: boolean;
   parlama: number;
+  atkiUnlem: boolean;
+  atkiHavada: number;
   sandalye: boolean;
 }
 
@@ -62,73 +76,88 @@ function donus(k: number, [a]: readonly [number, number], sira: [Poz['gorunus'],
   return { g: sira[i][0], ayna: sira[i][1] };
 }
 
-/** Oturan + düşünceli (yan görünüş, üst gövde yerelinde): avuç çenenin ön-alt konturunda kafaya değer,
- *  bükülü işaret parmağı yanakta (öne bakan yüz tarafı), başparmak geriye, çenenin altına. */
+/** Oturan + düşünceli (yan görünüş, üst gövde yerelinde, omuz (-5,-124), kafa -5° eğik). İki kemikli çözüm (el 158°):
+ *  avuç merkezi (35,-172) çenenin ön-alt konturuna değer; bükülü işaret parmağının boğumu ve ucu kafa merkezine
+ *  53 / 42 birim (parmak kalınlığı + kontur dahil 66'lık kafa konturunun içinde, yanağa yaslı);
+ *  başparmak geriye, çenenin altında (-1,-177). */
 function cenedeKol(): Poz['sagKol'] {
-  const A = GORUNUS.yan;
-  const avuc = { x: 36, y: OLCU.kafaY - OLCU.kalcaY + 69 };
-  return kolHedef(A.omuzX.sag, bilekNerede(avuc, 190, 14), 190, 'cene', false);
+  return { omuz: -56.1, dirsek: -118.9, bilek: -27.0, el: 'cene', ayna: false };
 }
 
 /** Bir karenin tüm durumu (atkı salınımı hariç). */
 export function sahneKaresi(k: number): SahneKaresi {
   const z: SahneKaresi = {
     x: XS, ayna: false, poz: AYAKTA.on, havada: 0, ezilme: { x: 1, y: 1 },
-    kafaDonus: 0, bas: 0, agiz: 'kapali', bak: 'izleyici', fikir: false, parlama: 0, sandalye: true,
+    kafaDonus: 0, bas: 0, agiz: 'kapali', bak: 'izleyici', fikir: false, parlama: 0,
+    atkiUnlem: false, atkiHavada: 0, sandalye: true,
   };
-  if (icinde(k, Z.yuru)) {
+  const oturan = otur(1);
+  const dusunen: Poz = { ...oturan, sagKol: cenedeKol(), kafaEgim: -5 };
+  const fikirSon = fikir(FIKIR_SURE - 1, dusunen).poz;
+
+  if (k < Z.yuru[1]) {
     const w = yuru(k / YURU.periyot, XS - BASLA);
     z.x = BASLA + w.kalcaX;
     z.poz = w.poz;
-  } else if (icinde(k, Z.don1)) {
-    const d = donus(k, Z.don1, [['yan', false], ['ucdort', false], ['on', false]]);
-    z.poz = AYAKTA[d.g];
-  } else if (icinde(k, Z.giris)) {
+  } else if (k < Z.don1[0]) {
+    z.poz = AYAKTA.yan; // nefes payı
+  } else if (k < Z.don1[1]) {
+    z.poz = AYAKTA[donus(k, Z.don1, [['yan', false], ['ucdort', false], ['on', false]]).g];
+  } else if (k < Z.giris[1]) {
     const g = giris(k - Z.giris[0]);
     Object.assign(z, { poz: g.poz, kafaDonus: g.kafaDonus, bas: g.bas, agiz: g.agiz });
-  } else if (icinde(k, Z.don2)) {
+  } else if (k < Z.don2[0]) {
+    z.poz = AYAKTA.on;
+  } else if (k < Z.don2[1]) {
     const d = donus(k, Z.don2, [['on', false], ['ucdort', true], ['yan', true]]);
     z.poz = AYAKTA[d.g]; z.ayna = d.ayna;
-  } else if (icinde(k, Z.otur)) {
+  } else if (k < Z.otur[1]) {
     z.ayna = true; z.x = CX;
     z.poz = otur(aralik(k, Z.otur[0], Z.otur[1] - 1));
-  } else if (icinde(k, Z.dus)) {
+  } else if (k < Z.dus[0]) {
+    z.ayna = true; z.x = CX; z.poz = oturan;
+  } else if (k < Z.dus[1]) {
     z.ayna = true; z.x = CX;
-    const oturan = otur(1);
-    const t = yumusak(aralik(k, Z.dus[0], Z.dus[0] + 12));
-    z.poz = pozKaristir(oturan, { ...oturan, sagKol: cenedeKol(), kafaEgim: -5 }, t);
+    z.poz = pozKaristir(oturan, dusunen, yumusak(aralik(k, Z.dus[0], Z.dus[0] + 12)));
     z.bak = 'yukari';
-  } else if (icinde(k, Z.fikir)) {
+  } else if (k < Z.fikir[1]) {
     z.ayna = true; z.x = CX;
-    const oturan = otur(1);
-    const temel = { ...oturan, sagKol: cenedeKol(), kafaEgim: -5 };
-    const f = fikir(k - Z.fikir[0], temel);
+    const f = fikir(k - Z.fikir[0], dusunen);
     z.poz = { ...f.poz, kafaEgim: -5 * (1 - aralik(k, Z.fikir[0], Z.fikir[0] + 8)) };
-    z.fikir = f.fikir; z.parlama = f.parlama;
-    z.bak = k - Z.fikir[0] > 10 ? 'yukari' : 'izleyici';
-  } else if (icinde(k, Z.kalk)) {
+    z.fikir = f.fikir; z.parlama = f.parlama; z.atkiUnlem = f.atkiUnlem;
+    z.bak = 'yukari'; // ampule bakar
+  } else if (k < Z.kalk[0]) {
+    z.ayna = true; z.x = CX; z.poz = fikirSon;
+    z.fikir = true; z.parlama = 1; z.atkiUnlem = true;
+  } else if (k < Z.kalk[1]) {
     z.ayna = true; z.x = CX;
     const p = aralik(k, Z.kalk[0], Z.kalk[1] - 1);
-    const son = fikir(FIKIR_SURE - 1, { ...otur(1), sagKol: cenedeKol() }).poz;
-    z.poz = pozKaristir(son, kalk(p), yumusak(aralik(k, Z.kalk[0], Z.kalk[0] + 9)));
-    // ampul söner
-    const s = 1 - aralik(k, Z.kalk[0], Z.kalk[0] + 8);
+    z.poz = pozKaristir(fikirSon, kalk(p), yumusak(aralik(k, Z.kalk[0], Z.kalk[0] + 9)));
+    const s = 1 - aralik(k, Z.kalk[0], Z.kalk[0] + 8); // ampul söner
     z.fikir = s > 0; z.parlama = s;
-  } else if (icinde(k, Z.zipla)) {
-    z.ayna = true; z.x = XS;
-    const j = zipla(k - Z.zipla[0]);
-    Object.assign(z, { poz: j.poz, havada: j.havada, ezilme: j.ezilme });
-  } else if (icinde(k, Z.don3)) {
-    const d = donus(k, Z.don3, [['yan', true], ['ucdort', true], ['on', false]]);
+  } else if (k < Z.don3[0]) {
+    z.ayna = true; z.poz = AYAKTA.yan;
+  } else if (k < Z.don3[1]) {
+    const d = donus(k, Z.don3, [['yan', true], ['ucdort', true]]);
+    z.poz = AYAKTA[d.g]; z.ayna = d.ayna;
+  } else if (k < Z.don4[0]) {
+    z.ayna = true;
+    const ilk = k < Z.zipla1[1];
+    const bas = ilk ? Z.zipla1[0] : Z.zipla2[0];
+    const kk = Math.min(ZIPLA_SURE - 1, Math.max(0, k - bas));
+    const j = zipla(kk, 'ucdort');
+    Object.assign(z, { poz: j.poz, havada: j.havada, ezilme: j.ezilme, atkiHavada: j.atkiHavada });
+  } else if (k < Z.don4[1]) {
+    const d = donus(k, Z.don4, [['ucdort', true], ['on', false]]);
     z.poz = AYAKTA[d.g]; z.ayna = d.ayna;
   } else {
     z.poz = AYAKTA.on;
     z.bas = onay(k - Z.onay[0]);
   }
-  // idle: nefes (yürüme/zıplama dışında), ara sıra yaylanma (ayakta dururken)
-  const hareketli = icinde(k, Z.yuru) || icinde(k, Z.zipla);
+  // idle: nefes (yürüme/zıplama dışında), sonda ayakları üzerinde hafif yaylanma
+  const hareketli = k < Z.yuru[1] || (k >= Z.zipla1[0] && k < Z.zipla2[1]);
   if (!hareketli) z.poz = { ...z.poz, kok: { ...z.poz.kok, y: z.poz.kok.y + nefes(k) } };
-  if (k >= Z.onay[0] + ONAY_SURE) z.poz = ayaktaCok(z.poz, yaylanma(k + 60));
+  if (k >= Z.onay[1]) z.poz = ayaktaCok(z.poz, yaylanma(k));
   return z;
 }
 
@@ -192,7 +221,7 @@ export const Sahne: React.FC<{ kare: number }> = ({ kare }) => {
           id="nod" x={nodX} y={ZEMIN - z.havada * S} olcek={S} sola={z.ayna} bak={z.bak} poz={poz}
           duygu={d.duygu} oncekiDuygu={d.onceki} gecis={d.t} kare={kare} golge={false}
           kirp={gozKirp(kare)} bas={z.bas} kafaDonus={z.kafaDonus} agiz={z.agiz}
-          fikir={z.fikir} fikirParlama={z.parlama}
+          fikir={z.fikir} fikirParlama={z.parlama} atkiUnlem={z.atkiUnlem} atkiHavada={z.atkiHavada}
         />
       </g>
       {z.sandalye && oturuyor && <g transform={`translate(${CX * S} ${ZEMIN}) scale(${-S} ${S})`}><SandalyeOn /></g>}

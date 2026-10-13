@@ -96,7 +96,8 @@ export interface GorunusAyari {
 export const GORUNUS: Record<GorunusAdi, GorunusAyari> = {
   on: { yaw: 0, govdeG: 46, omuzX: { sag: -30, sol: 30 }, kalcaX: { sag: -16, sol: 16 }, uzak: null, golgeRx: 70, golgeX: 0 },
   ucdort: { yaw: 0.55, govdeG: 38, omuzX: { sag: -25, sol: 21 }, kalcaX: { sag: -13, sol: 11 }, uzak: 'sol', golgeRx: 70, golgeX: 0 },
-  yan: { yaw: 0.92, govdeG: 30, omuzX: { sag: 1, sol: -4 }, kalcaX: { sag: 2, sol: -5 }, uzak: 'sol', golgeRx: 62, golgeX: 10 },
+  // yan: gövde paneli önden genişliğin ~%78'i (tek çizgiye dönmesin); omuzlar geride, kol panelin önünü kapatmaz
+  yan: { yaw: 0.92, govdeG: 36, omuzX: { sag: -5, sol: -9 }, kalcaX: { sag: 2, sol: -5 }, uzak: 'sol', golgeRx: 62, golgeX: 10 },
   arka: { yaw: Math.PI, govdeG: 46, omuzX: { sag: 30, sol: -30 }, kalcaX: { sag: 16, sol: -16 }, uzak: null, golgeRx: 70, golgeX: 0 },
 };
 
