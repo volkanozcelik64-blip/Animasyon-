@@ -1,7 +1,8 @@
 import React from 'react';
-import { RENK, OLCU, ATKI, GORUNUS, type Agiz, type Bakis } from './olculer';
+import { random } from 'remotion';
+import { RENK, OLCU, CIZGI, ATKI, GORUNUS, KAYNAMA, type Agiz, type Bakis } from './olculer';
 import {
-  Tanimlar, El, Ayakkabi, AtkiSarili, AtkiOn, AtkiUcu, atkiUcNoktasi,
+  Tanimlar, El, Ayakkabi, AtkiSarili, AtkiOn, AtkiUcu, AtkiDugumArka, atkiUcNoktasi,
   type Gorunus, type ElPozu,
 } from './parcalar';
 import { YuzOzellikleri, YuzTonu, Ekler, type Duygu } from './yuz';
@@ -112,7 +113,7 @@ const Kafa: React.FC<{
       </g>
       {gecisVar && katman(onceki!, 1 - t, 'o')}
       {katman(duygu, gecisVar ? t : 1, 'y')}
-      <circle r={R} fill="none" stroke={RENK.murekkep} strokeWidth={OLCU.kontur} />
+      <circle r={R} fill="none" stroke={RENK.murekkep} strokeWidth={CIZGI.kafa} />
       {gecisVar && ek(onceki!, 1 - t, 'eo')}
       {ek(duygu, gecisVar ? t : 1, 'ey')}
     </g>
@@ -165,10 +166,13 @@ export const Nod: React.FC<NodProps> = (p) => {
   const sekil0 = atkiSekli(durum, kare, g);
   const sekil1 = gecisVar ? atkiKaristir(atkiSekli(p.oncekiDuygu!, kare, g), sekil0, t) : sekil0;
   const uc = atkiSalinim(sekil1, poz.atki.a1 - poz.egim, poz.atki.a2);
-  const ucX = g === 'ucdort' ? ux * ATKI.ucdortOlcek + 4 : g === 'on' ? ux * ATKI.onOlcek : ux;
+  const ucX = g === 'ucdort' ? ux * ATKI.ucdortOlcek + 4 : g === 'on' ? ux * ATKI.onOlcek : ux; // arka/yan: ölçeksiz
 
+  // çizgi kaynaması: her KAYNAMA.aralik karede yeni bir gürültü; Remotion random(seed) ile deterministik
   const kaynama = p.kaynama ?? true;
-  const tohum = Math.floor(kare / 4) + 1; // her 4 karede bir yeni çizgi titremesi; deterministik
+  const adim = Math.floor(kare / KAYNAMA.aralik);
+  const tohum = Math.floor(random(`${id}-kaynama-${adim}`) * 1000);
+  const kayma = KAYNAMA.enFazla * (0.6 + 0.4 * random(`${id}-kayma-${adim}`)); // en fazla ~2 birim (1-2px)
 
   return (
     <g transform={`translate(${p.x ?? 0} ${p.y ?? 0}) scale(${(p.olcek ?? 1) * (ayna ? -1 : 1)} ${p.olcek ?? 1})`}>
@@ -176,8 +180,8 @@ export const Nod: React.FC<NodProps> = (p) => {
       {kaynama && (
         <defs>
           <filter id={`${id}-kaynama`} x="-10%" y="-10%" width="120%" height="120%">
-            <feTurbulence type="fractalNoise" baseFrequency="0.03" numOctaves="1" seed={tohum} />
-            <feDisplacementMap in="SourceGraphic" scale="1.6" xChannelSelector="R" yChannelSelector="G" />
+            <feTurbulence type="fractalNoise" baseFrequency={KAYNAMA.frekans} numOctaves="1" seed={tohum} />
+            <feDisplacementMap in="SourceGraphic" scale={kayma} xChannelSelector="R" yChannelSelector="G" />
           </filter>
         </defs>
       )}
@@ -194,7 +198,7 @@ export const Nod: React.FC<NodProps> = (p) => {
           {/* gövde paneli: atkının altından kalçaya */}
           <path
             d={`M${-govdeYari} ${BOYUN + 6}L${govdeYari} ${BOYUN + 6}L${govdeYari - 1} -6Q${govdeYari - 1} 6 ${govdeYari - 13} 6L${-govdeYari + 13} 6Q${-govdeYari + 1} 6 ${-govdeYari + 1} -6Z`}
-            fill={RENK.beyaz} stroke={RENK.murekkep} strokeWidth={OLCU.kontur} strokeLinejoin="round" />
+            fill={RENK.beyaz} stroke={RENK.murekkep} strokeWidth={CIZGI.govde} strokeLinejoin="round" />
           {/* kollar (borular atkının arkasında) */}
           {onKollar.map((tf) => kol(tf, 'tup'))}
           {/* kafa */}
@@ -206,7 +210,13 @@ export const Nod: React.FC<NodProps> = (p) => {
           {/* atkı: sarılı kısım, sarkan uç, önündeki kıvrım/düğüm (arkadan uç ve kıvrım görünmez) */}
           <g transform={`translate(0 ${BOYUN})`}>
             <g transform={atkiDonus}><AtkiSarili id={id} gorunus={atkiGorunus} /></g>
-            {g !== 'arka' && (
+            {g === 'arka' ? (
+              // arkadan: düğüm ensede, uç ondan sarkar (uç düğümün altından çıkar)
+              <>
+                <g transform={`translate(${ucX} ${uy})`}><AtkiUcu id={id} sekil={{ ...uc, onde: false }} /></g>
+                <AtkiDugumArka id={id} />
+              </>
+            ) : (
               <>
                 {!uc.onde && <g transform={`translate(${ucX} ${uy})`}><AtkiUcu id={id} sekil={uc} /></g>}
                 <g transform={atkiDonus}><AtkiOn id={id} gorunus={atkiGorunus} /></g>

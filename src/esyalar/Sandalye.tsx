@@ -1,41 +1,37 @@
 import React from 'react';
-import { RENK, OLCU } from '../karakter/olculer';
+import { OLCU } from '../karakter/olculer';
+import { ESYA, kontur, detay } from './stil';
 
 // Yandan sandalye, zemin y=0. Oturak üstü, oturan Nod'un uyluk alt kenarına denk gelir
 // (baldır dik, ayak yerde): Nod'un ölçüleri değişirse sandalye de uyar.
-// Katman sırası: <SandalyeArka /> → <Nod /> → <SandalyeOn />
+// Katman sırası (§7): <SandalyeArka /> → <Nod /> → <SandalyeOn />
 export const OTURAK_Y = -(OLCU.altBacak - OLCU.bilekY) + OLCU.bacakKalinlik / 2;
-
-const AHSAP = '#c98a4b';
-const AHSAP_ACIK = '#e0a868';
-const AHSAP_KOYU = '#b5733a';
-const cizgi = { stroke: RENK.murekkep, strokeLinejoin: 'round' as const, strokeLinecap: 'round' as const };
+const Y = OTURAK_Y;
 
 const Bacak: React.FC<{ x: number; ust: number }> = ({ x, ust }) => (
-  <>
-    <path d={`M${x} 0V${ust}`} {...cizgi} strokeWidth="12" />
-    <path d={`M${x} -2V${ust + 2}`} stroke={AHSAP_KOYU} strokeWidth="4.5" strokeLinecap="round" />
-  </>
+  <rect x={x - 6} y={ust} width="12" height={-ust} rx="4" fill={ESYA.dolgu} {...kontur} />
 );
-
-const Y = OTURAK_Y;
 
 /** Arkalık, arka bacak, oturak, destek: Nod'un arkasında kalan her şey. */
 export const SandalyeArka: React.FC = () => (
   <g>
     <Bacak x={-48} ust={Y - 150} />
-    <rect x="-59" y={Y - 132} width="18" height="110" rx="6" fill={AHSAP} {...cizgi} strokeWidth="5" />
-    <path d={`M-54 ${Y - 122}V${Y - 32}`} stroke={AHSAP_ACIK} strokeWidth="2.2" />
-    <path d={`M-48 ${Y * 0.38}H44`} {...cizgi} strokeWidth="7" />
-    <path d={`M-48 ${Y * 0.38}H44`} stroke={AHSAP_KOYU} strokeWidth="2" />
-    <rect x="-62" y={Y} width="118" height="15" rx="6" fill={AHSAP} {...cizgi} strokeWidth="5" />
-    <path d={`M-55 ${Y + 4}H49`} stroke={AHSAP_ACIK} strokeWidth="2.2" />
+    <rect x="-60" y={Y - 132} width="20" height="110" rx="7" fill={ESYA.dolgu} {...kontur} />
+    <path d={`M-50 ${Y - 120}V${Y - 34}`} {...detay} stroke={ESYA.golge} strokeWidth="5" />
+    <rect x="-48" y={Y * 0.38 - 4} width="92" height="8" rx="3" fill={ESYA.dolgu} {...kontur} />
+    {/* oturak + minder (az renk) */}
+    <rect x="-62" y={Y} width="118" height="15" rx="6" fill={ESYA.dolgu} {...kontur} />
+    <rect x="-58" y={Y - 9} width="108" height="11" rx="5" fill={ESYA.vurguAcik} {...kontur} strokeWidth={3.5} />
   </g>
 );
 
 /** Ön bacak: Nod'un önünde. */
-export const SandalyeOn: React.FC = () => (
+export const SandalyeOn: React.FC = () => <Bacak x={44} ust={Y + 15} />;
+
+/** Tek parça (Nod oturmuyorken). */
+export const Sandalye: React.FC = () => (
   <g>
-    <Bacak x={44} ust={Y + 12} />
+    <SandalyeArka />
+    <SandalyeOn />
   </g>
 );

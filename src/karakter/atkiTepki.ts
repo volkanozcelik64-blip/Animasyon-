@@ -49,7 +49,8 @@ function kalpYolu(boyut: number): Nokta[] {
 export function atkiSekli(d: AtkiDurumAdi, k: number, gorunus: GorunusAdi): AtkiSekli {
   const L = ATKI.ucBoy;
   const w = gorunus === 'yan' ? ATKI.ucGenislikYan : ATKI.ucGenislik;
-  const geri = gorunus === 'yan' ? -1 : 1;
+  // arkadan bakışta karakterin sol omzu ekranın solunda
+  const geri = gorunus === 'yan' || gorunus === 'arka' ? -1 : 1;
   const titre = (k % 2 === 0 ? 1 : -1);
   switch (d) {
     case 'mutlu': // kuyruk gibi sallanır

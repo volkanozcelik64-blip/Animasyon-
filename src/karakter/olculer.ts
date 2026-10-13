@@ -31,9 +31,12 @@ export const RENK = {
 
 // Ölçüler (birim: SVG birimi; ayak tabanı y=0, yukarı negatif).
 // Referans tam boydan ölçüldü: kafa çapı D=132, toplam boy ≈ 3.9 D.
+const KAFA_CAPI = 132;
+
 export const OLCU = {
-  kafaR: 66,
-  kontur: 5.5, // kalın siyah kontur
+  kafaCapi: KAFA_CAPI,
+  kafaR: KAFA_CAPI / 2,
+  kontur: 5.5, // kalın siyah kontur (kafa, gövde) — 1080p'de ayakta ~%50 boyda ≈ 6px
   inceKontur: 2.6, // atkı/yüz detayı
   kolKalinlik: 17,
   bacakKalinlik: 17,
@@ -49,6 +52,23 @@ export const OLCU = {
   omuzY: -340,
   kafaY: -451,
 } as const;
+
+/** Çizgi kalınlıkları (karakter yerel ölçüsünde; el ve ayakkabı kendi ölçekleriyle büyür). */
+export const CIZGI = {
+  kafa: OLCU.kontur,
+  govde: OLCU.kontur,
+  eldiven: 2.6, // × elOlcek ≈ 4.8
+  bileklik: 2.6,
+  ayakkabi: 3.6, // × ayakOlcek ≈ 4.5
+  atki: OLCU.inceKontur,
+  atkiDetay: 1.4,
+  yuz: 3.6, // kaş, kapalı göz, ağız çizgileri
+  esya: 5, // eşyaların kalın konturu
+  esyaDetay: 2.2,
+} as const;
+
+/** Çizgi kaynaması (line boil): her `aralik` karede kontur en fazla `enFazla` birim (≈1-2px) kayar. */
+export const KAYNAMA = { aralik: 4, enFazla: 2, frekans: 0.03 } as const;
 
 /** Ayakta toplam boy (kafa tepesi → taban). */
 export const BOY = -(OLCU.kafaY - OLCU.kafaR);

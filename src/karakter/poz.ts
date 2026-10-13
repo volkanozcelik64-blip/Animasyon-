@@ -104,10 +104,10 @@ export const DUYGU_POZLARI: Partial<Record<Duygu, Poz>> = {
     solKol: { omuz: -34, dirsek: 28, bilek: 0, el: 'salla', ayna: true },
     atki: { a1: 0, a2: 0 },
   },
-  /** eller belde (önden), çene hafif yukarıda */
+  /** göğüs önde: 3/4'te üst gövde geriye yaslanır, eller belde */
   gururlu: {
-    ...AYAKTA.on,
-    kafaEgim: 0,
+    ...AYAKTA.ucdort,
+    egim: -7, kafaEgim: -3,
     // dirsekler dışarıda, yumruklar kalça yanında aşağı bakar (el gövde kenarının dışında)
     sagKol: { omuz: 45, dirsek: -79, bilek: 34, el: 'yumruk' },
     solKol: { omuz: -45, dirsek: 79, bilek: -34, el: 'yumruk' },

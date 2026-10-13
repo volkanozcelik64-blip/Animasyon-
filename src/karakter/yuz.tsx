@@ -1,5 +1,5 @@
 import React from 'react';
-import { RENK, OLCU, BAKIS_KAYMA, type Agiz, type Bakis } from './olculer';
+import { RENK, OLCU, CIZGI, BAKIS_KAYMA, type Agiz, type Bakis } from './olculer';
 
 /** Referanstaki 9 duygu. Ayrıca 'sakin': tam boy referanstaki varsayılan yüz. */
 export const DUYGULAR = [
@@ -13,7 +13,7 @@ export type Duygu = (typeof DUYGULAR)[number] | (typeof EK_DUYGULAR)[number] | '
 
 const R = OLCU.kafaR;
 const K = RENK.murekkep;
-const cizgi = (w = 4) => ({ stroke: K, strokeWidth: w, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, fill: 'none' });
+const cizgi = (w: number = CIZGI.yuz) => ({ stroke: K, strokeWidth: w, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, fill: 'none' });
 
 // ---------------------------------------------------------------- küre izdüşümü
 // Yüz parçaları kafa küresinin üstüne yapışık: yaw ile dönünce kayar ve daralır.

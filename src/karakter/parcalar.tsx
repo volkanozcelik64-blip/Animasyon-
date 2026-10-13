@@ -1,5 +1,5 @@
 import React from 'react';
-import { RENK, OLCU } from './olculer';
+import { RENK, OLCU, CIZGI } from './olculer';
 import { seritYolu, type AtkiSekli } from './atkiTepki';
 
 import type { GorunusAdi } from './olculer';
@@ -47,7 +47,7 @@ type Sekil =
   | { t: 'k'; x1: number; y1: number; x2: number; y2: number; w: number };
 type Parca = Sekil & { kat: 'alt' | 'birlesik' | 'ust' };
 
-const O = 2.6; // eldiven kontur kalınlığı
+const O = CIZGI.eldiven; // eldiven kontur kalınlığı
 
 function sekilCiz(s: Sekil, fill: string, ek: number, key: string) {
   if (s.t === 'c') return <circle key={key} cx={s.x} cy={s.y} r={s.r + ek} fill={fill} />;
@@ -142,11 +142,11 @@ export const El: React.FC<{ poz: ElPozu; s?: number; nesne?: React.ReactNode }> 
       )}
       {/* eldiven sırt dikişleri (çizgi film eldiveni) */}
       {poz === 'salla' && (
-        <path d="M-3 9V15M3 9V15" stroke={RENK.murekkep} strokeWidth="1.4" strokeLinecap="round" opacity="0.8" />
+        <path d="M-3 9V15M3 9V15" stroke={RENK.murekkep} strokeWidth={CIZGI.atkiDetay} strokeLinecap="round" opacity="0.8" />
       )}
       {/* bileklik */}
       <rect x="-10" y="-3" width="20" height="10" rx="3" fill={RENK.bileklik}
-        stroke={RENK.murekkep} strokeWidth="2.6" />
+        stroke={RENK.murekkep} strokeWidth={CIZGI.bileklik} />
       <path d="M-7.5 -0.5H7.5" stroke="#8cc4f2" strokeWidth="1.6" strokeLinecap="round" />
     </g>
   );
@@ -157,7 +157,7 @@ export const El: React.FC<{ poz: ElPozu; s?: number; nesne?: React.ReactNode }> 
 // s: burnun baktığı yön (+1 sağ / -1 sol). Önden bakışta burunlar dışa döner.
 export const Ayakkabi: React.FC<{ gorunus: Gorunus; s?: number }> = ({ gorunus, s = 1 }) => {
   const k = RENK.murekkep;
-  const w = 3.6;
+  const w = CIZGI.ayakkabi;
   if (gorunus === 'arka') {
     return (
       <g transform={`translate(0 ${-OLCU.bilekY}) scale(${OLCU.ayakOlcek}) translate(0 ${OLCU.bilekY}) translate(${6 * s} 0)`} strokeLinejoin="round">
@@ -195,7 +195,7 @@ const ak = { stroke: RENK.atkiKontur, strokeWidth: OLCU.inceKontur, strokeLinejo
 /** Sarkan ucun bağlandığı nokta (boyun yerelinde). */
 export function atkiUcNoktasi(g: Gorunus): [number, number] {
   if (g === 'yan') return [26, 8];
-  if (g === 'arka') return [0, 0]; // arkadan görünmez
+  if (g === 'arka') return [-13, 10]; // arkadan: ensede düğüm, uç ondan sarkar
   if (g === 'ucdort') return [22, 10];
   return [14, 10];
 }
@@ -255,10 +255,20 @@ export const AtkiOn: React.FC<{ id: string; gorunus: Gorunus }> = ({ id, gorunus
     <g>
       <path d="M-44 -12C-22 -16 10 -4 32 10C38 15 34 25 25 24C4 21 -20 10 -40 8C-50 4 -50 -10 -44 -12Z" fill={f} {...ak} />
       <path d="M-40 -3C-20 -1 6 8 26 18" fill="none" stroke={RENK.atkiKoyu} strokeWidth="1.8" />
-      <path d="M-38 -9C-16 -8 6 0 22 9" fill="none" stroke={RENK.atkiAcik} strokeWidth="1.4" opacity="0.8" />
+      <path d="M-38 -9C-16 -8 6 0 22 9" fill="none" stroke={RENK.atkiAcik} strokeWidth={CIZGI.atkiDetay} opacity="0.8" />
     </g>
   );
 };
+
+/** Arkadan görünüşte ensedeki düğüm (sarkan ucun kökünü örter). */
+export const AtkiDugumArka: React.FC<{ id: string }> = ({ id }) => (
+  <g transform="translate(-13 6)">
+    <ellipse cx="-12" cy="-1" rx="15" ry="12" fill={`url(#${id}-orguK)`} {...ak} />
+    <ellipse cx="12" cy="0" rx="14" ry="11" fill={`url(#${id}-orguK)`} {...ak} />
+    <ellipse cx="0" cy="2" rx="10" ry="11" fill={`url(#${id}-orgu)`} {...ak} />
+    <path d="M-4 -3Q0 2 4 -3M-4 4Q0 8 4 4" fill="none" stroke={RENK.atkiKoyu} strokeWidth={CIZGI.atkiDetay} />
+  </g>
+);
 
 /** Sarkan uç: duyguya göre biçimlenen örgü şerit (bkz. atkiTepki.ts).
  *  Önce kalın kontur, sonra dolgu: kendi üstüne kıvrılınca (kalp, soru işareti) iç çizgiler kaybolmaz ama kopmaz. */
@@ -269,13 +279,13 @@ export const AtkiUcu: React.FC<{ id: string; sekil: AtkiSekli }> = ({ id, sekil 
     <g strokeLinejoin="round" strokeLinecap="round">
       <path d={yol} fill={f} stroke={RENK.atkiKontur} strokeWidth={OLCU.inceKontur * 2} />
       <path d={yol} fill={f} />
-      <path d={dikis} fill="none" stroke={RENK.atkiKoyu} strokeWidth="1.4" />
-      <path d={uc} fill="none" stroke={RENK.atkiKoyu} strokeWidth="1.4" />
+      <path d={dikis} fill="none" stroke={RENK.atkiKoyu} strokeWidth={CIZGI.atkiDetay} />
+      <path d={uc} fill="none" stroke={RENK.atkiKoyu} strokeWidth={CIZGI.atkiDetay} />
       {/* öndeki biçimlerde kök: kıvrımın içinden çıkan küçük düğüm */}
       {sekil.onde && (
         <g>
           <ellipse cx="0" cy="-2" rx="11" ry="9" fill={`url(#${id}-orguK)`} stroke={RENK.atkiKontur} strokeWidth={OLCU.inceKontur} />
-          <path d="M-7 -4Q0 1 7 -4" fill="none" stroke={RENK.atkiKoyu} strokeWidth="1.4" />
+          <path d="M-7 -4Q0 1 7 -4" fill="none" stroke={RENK.atkiKoyu} strokeWidth={CIZGI.atkiDetay} />
         </g>
       )}
     </g>
