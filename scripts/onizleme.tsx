@@ -6,8 +6,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Nod } from '../src/karakter/Nod';
 import { SandalyeArka, SandalyeOn } from '../src/esyalar/Sandalye';
-import { DUYGULAR, type Duygu } from '../src/karakter/yuz';
-import { AYAKTA, OTURAN, EL_SALLAYAN, ISARET_EDEN, type Poz } from '../src/karakter/poz';
+import { DUYGULAR, EK_DUYGULAR, type Duygu } from '../src/karakter/yuz';
+import { AYAKTA, OTURAN, EL_SALLAYAN, ISARET_EDEN, DUYGU_POZLARI, FIKIR, type Poz } from '../src/karakter/poz';
+import { AGIZLAR, type Bakis } from '../src/karakter/olculer';
 import { El, type ElPozu } from '../src/karakter/parcalar';
 import { OLCU, RENK } from '../src/karakter/olculer';
 import { atkiSimule } from '../src/karakter/atki';
@@ -52,7 +53,7 @@ async function main() {
     const vbW = vbH * ihW / ihH;
     return svg(
       <svg viewBox={`${-vbW / 2} ${OLCU.kafaY - OLCU.kafaR - vbH * 0.17} ${vbW} ${vbH}`} width={ihW} height={ihH}>
-        <Nod id={`d${d}`} duygu={d} kare={kare} golge={false} />
+        <Nod id={`d${d}`} duygu={d} kare={kare} golge={false} atkiTepki={false} />
       </svg>,
     );
   };
@@ -76,16 +77,16 @@ async function main() {
         {on}
       </svg>,
     );
-  const gorunusler = `<div style="display:flex">${(['on', 'ucdort', 'yan'] as const).map((g, i) =>
-    `<div>${tamBoy(AYAKTA[g], 'sakin', `g${i}`, 420)}<div class="etiket">${['ÖNDEN', '3/4 YAN', 'PROFİL'][i]}</div></div>`).join('')}</div>`;
-  await cek('gorunusler.png', gorunusler, 1260, 760);
+  const gorunusler = `<div style="display:flex">${(['on', 'ucdort', 'yan', 'arka'] as const).map((g, i) =>
+    `<div>${tamBoy(AYAKTA[g], 'sakin', `g${i}`, 330)}<div class="etiket">${['ÖNDEN', '3/4 YAN', 'PROFİL', 'ARKADAN'][i]}</div></div>`).join('')}</div>`;
+  await cek('gorunusler.png', gorunusler, 1320, 620);
 
   // referans tam boy | bizim önden (aynı boy ölçeğinde) + 3/4 + profil
   await cek('gorunusler-karsilastirma.png', `
     <div style="display:flex;gap:20px;padding:10px;align-items:flex-start">
       <div><div class="baslik">Referans (tam boy)</div><div style="padding-top:0px">${refKirp(610, 175, 270, 660, 1.08)}</div></div>
       <div><div class="baslik">SVG — önden / 3/4 / profil</div>${gorunusler}</div>
-    </div>`, 1580, 800);
+    </div>`, 1640, 800);
 
   // ------------------------------------------------ 3) dört poz
   const pozlar: [Poz, Duygu, string, React.ReactNode?, React.ReactNode?][] = [
@@ -126,6 +127,38 @@ async function main() {
       <Nod id={`a${k}`} poz={{ ...AYAKTA.on, atki: aci[k] }} duygu="mutlu" />
       <text x="0" y="16" fontSize="16" textAnchor="middle" fill="#555">kare {k}</text>
     </svg>)).join('')}</div>`, 1600, 160 * (-OLCU.kafaY + 100) / 240 + 4);
+
+  // ------------------------------------------------ §3 ek duygular (kendi pozlarıyla) + fikir anı
+  const ekler: [Duygu, string, boolean?][] = [
+    ['dusunceli', 'DÜŞÜNCELİ'], ['sasirmis', 'ŞAŞIRMIŞ'], ['gururlu', 'GURURLU'], ['sikilmis', 'SIKILMIŞ'], ['utangac', 'UTANGAÇ'],
+    ['mutlu', 'FİKİR ANI', true],
+  ];
+  await cek('ek-duygular.png', `<div style="display:flex">${ekler.map(([d, ad, fikir], i) => `<div>${svg(
+    <svg viewBox={`-180 ${OLCU.kafaY - 150} 360 ${-OLCU.kafaY + 175}`} width="300" height={300 * (-OLCU.kafaY + 175) / 360}>
+      <Nod id={`e${i}`} duygu={d} poz={fikir ? FIKIR : DUYGU_POZLARI[d]} fikir={fikir} kare={20}
+        bak={d === 'dusunceli' ? 'yukari' : d === 'utangac' ? 'sag' : 'izleyici'} />
+    </svg>)}<div class="etiket">${ad}</div></div>`).join('')}</div>`, 1800, 680);
+
+  // ------------------------------------------------ §4 atkı tepkileri (her duygu + fikir)
+  const tepkiler: (Duygu | 'fikir')[] = [...DUYGULAR, ...EK_DUYGULAR, 'fikir'];
+  const tepkiAd: Record<string, string> = { kafasi_karisik: 'kafası karışık', heyecanli: 'heyecanlı', uzgun: 'üzgün', kizgin: 'kızgın', korkmus: 'korkmuş', asik: 'aşık', notr: 'nötr', dusunceli: 'düşünceli', sasirmis: 'şaşırmış', sikilmis: 'sıkılmış', utangac: 'utangaç' };
+  await cek('atki-tepkileri.png', `<div style="display:grid;grid-template-columns:repeat(5,300px)">${tepkiler.map((d, i) => `<div>${svg(
+    <svg viewBox={`-150 ${OLCU.kafaY - 95} 300 290`} width="300" height="290">
+      <Nod id={`r${i}`} gorunus="on" duygu={d === 'fikir' ? 'mutlu' : d} fikir={d === 'fikir'} kare={14} golge={false} />
+    </svg>)}<div class="etiket" style="margin:-4px 0 14px">${(tepkiAd[d] ?? d).toUpperCase()}</div></div>`).join('')}</div>`, 1500, 1020);
+
+  // ------------------------------------------------ §8 ağız şekilleri (sakin yüz üstünde)
+  await cek('agiz-sekilleri.png', `<div style="display:flex">${AGIZLAR.map((a, i) => `<div>${svg(
+    <svg viewBox={`-80 ${OLCU.kafaY - 75} 160 150`} width="200" height="188">
+      <Nod id={`m${i}`} agiz={a} golge={false} kaynama={false} />
+    </svg>)}<div class="etiket">${a}</div></div>`).join('')}</div>`, 1600, 230);
+
+  // ------------------------------------------------ §2 bakış yönleri
+  const bakislar: Bakis[] = ['sol', 'sag', 'yukari', 'asagi', 'izleyici'];
+  await cek('bakis.png', `<div style="display:flex">${bakislar.map((b, i) => `<div>${svg(
+    <svg viewBox={`-80 ${OLCU.kafaY - 75} 160 150`} width="200" height="188">
+      <Nod id={`b${i}`} bak={b} golge={false} kaynama={false} />
+    </svg>)}<div class="etiket">${b.toUpperCase()}</div></div>`).join('')}</div>`, 1000, 230);
 
   await tarayici.close();
 }

@@ -1,28 +1,15 @@
 import React from 'react';
-import { RENK, OLCU } from './olculer';
+import { RENK, OLCU, ATKI, GORUNUS, type Agiz, type Bakis } from './olculer';
 import {
   Tanimlar, El, Ayakkabi, AtkiSarili, AtkiOn, AtkiUcu, atkiUcNoktasi,
   type Gorunus, type ElPozu,
 } from './parcalar';
 import { YuzOzellikleri, YuzTonu, Ekler, type Duygu } from './yuz';
-import { AYAKTA, type Poz, type Kol, type Bacak } from './poz';
+import { AYAKTA, DUYGU_POZLARI, type Poz, type Kol, type Bacak } from './poz';
+import { atkiSekli, atkiKaristir, atkiSalinim, type AtkiDurumAdi } from './atkiTepki';
+import { Ampul } from '../esyalar/Ampul';
 
-export type { Gorunus, ElPozu, Duygu, Poz };
-
-interface GorunusAyari {
-  yaw: number; // kafa dönüşü (radyan); yüz parçaları küre üstünde kayar
-  govdeG: number; // gövde paneli genişliği
-  omuzX: { sag: number; sol: number };
-  kalcaX: { sag: number; sol: number };
-  /** arkada kalan (gövdenin arkasına çizilen) taraf */
-  uzak: 'sag' | 'sol' | null;
-}
-
-const AYAR: Record<Gorunus, GorunusAyari> = {
-  on: { yaw: 0, govdeG: 46, omuzX: { sag: -30, sol: 30 }, kalcaX: { sag: -16, sol: 16 }, uzak: null },
-  ucdort: { yaw: 0.55, govdeG: 38, omuzX: { sag: -25, sol: 21 }, kalcaX: { sag: -13, sol: 11 }, uzak: 'sol' },
-  yan: { yaw: 0.92, govdeG: 30, omuzX: { sag: 1, sol: -4 }, kalcaX: { sag: 2, sol: -5 }, uzak: 'sol' },
-};
+export type { Gorunus, ElPozu, Duygu, Poz, Agiz, Bakis };
 
 // kalça merkezine göre yerel yükseklikler
 const BOYUN = OLCU.boyunY - OLCU.kalcaY;
@@ -46,8 +33,16 @@ export interface NodProps {
   x?: number;
   y?: number;
   olcek?: number;
-  /** bakış yönü: yan/3/4 görünüşler varsayılan sağa bakar; 'sol' aynalar */
-  bak?: 'sag' | 'sol';
+  /** bakış (§2): önden göz bebekleri kayar; yan/3/4'te 'sol' karakteri sola döndürür (aynalar) */
+  bak?: Bakis;
+  /** konuşma ağzı (§8): duygunun üstüne uygulanır; 'kapali' = duygunun kendi ağzı */
+  agiz?: Agiz;
+  /** fikir anı: ampul belirir, atkı ucu ünlem gibi dikleşir */
+  fikir?: boolean;
+  /** atkı ucu duyguya tepki versin mi (§4). Vars. açık; kapalıyken düz sarkar (yalnızca follow-through). */
+  atkiTepki?: boolean;
+  /** çizgi kaynaması (§6): konturlar her 4 karede 1-2px değişir. Vars. açık. */
+  kaynama?: boolean;
   /** pozdaki el şeklini her iki el için ezer */
   el?: ElPozu;
 }
@@ -61,7 +56,7 @@ type KolKatmani = 'tup' | 'el' | 'hepsi';
 
 function KolCiz({ kol, x, s, katman, nesne }: { kol: Kol; x: number; s: number; katman: KolKatmani; nesne?: React.ReactNode }) {
   const tup = katman !== 'el';
-  const el = katman !== 'tup';
+  const el = katman !== 'tup' && !kol.arkada; // arkadaki el gövdenin arkasında kalır, görünmez
   return (
     <g transform={`translate(${x} ${OMUZ}) rotate(${kol.omuz})`}>
       {tup && <Tup L={OLCU.ustKol} w={OLCU.kolKalinlik} />}
@@ -91,20 +86,21 @@ function BacakCiz({ bacak, x, s, gorunus }: { bacak: Bacak; x: number; s: number
 }
 
 // ---------------------------------------------------------------- kafa
-const Kafa: React.FC<{ id: string; yaw: number; duygu: Duygu; onceki?: Duygu; t: number; kare: number }> = ({
-  id, yaw, duygu, onceki, t, kare,
-}) => {
+const Kafa: React.FC<{
+  id: string; yaw: number; duygu: Duygu; onceki?: Duygu; t: number; kare: number;
+  bak: Bakis; agiz: Agiz; ayna: boolean; arka: boolean;
+}> = ({ id, yaw, duygu, onceki, t, kare, bak, agiz, ayna, arka }) => {
   const R = OLCU.kafaR;
   const sikis = 1 - 0.28 * Math.sin(Math.PI * t); // geçişte yüz hafifçe büzülüp açılır (kırpışma)
   const katman = (d: Duygu, op: number, key: string) =>
     op <= 0.001 ? null : (
       <g key={key} opacity={op}>
-        <g clipPath={`url(#${id}-kafa)`}><YuzTonu duygu={d} id={id} /></g>
-        <g clipPath={`url(#${id}-kafa)`}><g transform={`translate(0 2) scale(1.12 ${1.12 * sikis})`}><YuzOzellikleri duygu={d} id={id} yaw={yaw} /></g></g>
+        {!arka && <g clipPath={`url(#${id}-kafa)`}><YuzTonu duygu={d} id={id} /></g>}
+        {!arka && <g clipPath={`url(#${id}-kafa)`}><g transform={`translate(0 2) scale(1.12 ${1.12 * sikis})`}><YuzOzellikleri duygu={d} id={id} yaw={yaw} bak={bak} agiz={agiz} /></g></g>}
       </g>
     );
   const ek = (d: Duygu, op: number, key: string) =>
-    op <= 0.001 ? null : <g key={key} opacity={op}><Ekler duygu={d} kare={kare} yaw={yaw} /></g>;
+    op <= 0.001 ? null : <g key={key} opacity={op}><Ekler duygu={d} kare={kare} yaw={arka ? 0 : yaw} ayna={ayna} /></g>;
   const gecisVar = onceki && onceki !== duygu && t < 1;
   return (
     <g>
@@ -126,68 +122,100 @@ const Kafa: React.FC<{ id: string; yaw: number; duygu: Duygu; onceki?: Duygu; t:
 // ---------------------------------------------------------------- karakter
 export const Nod: React.FC<NodProps> = (p) => {
   const id = (p.id ?? 'k').replace(/[^a-zA-Z0-9_-]/g, '');
-  const temel = p.poz ?? AYAKTA[p.gorunus ?? 'on'];
+  const duygu = p.duygu ?? 'sakin';
+  // poz verilmezse: ek duygunun kendi pozu (önden), yoksa ayakta
+  const temel = p.poz ?? (p.gorunus && p.gorunus !== 'on' ? AYAKTA[p.gorunus] : DUYGU_POZLARI[duygu] ?? AYAKTA[p.gorunus ?? 'on']);
   const poz: Poz = p.el ? { ...temel, sagKol: { ...temel.sagKol, el: p.el }, solKol: { ...temel.solKol, el: p.el } } : temel;
   const g = poz.gorunus;
-  const A = AYAR[g];
-  const duygu = p.duygu ?? 'sakin';
+  const A = GORUNUS[g];
   const t = p.gecis ?? 1;
   const kare = p.kare ?? 0;
+  const bak: Bakis = p.bak ?? 'izleyici';
+  const ayna = bak === 'sol' && g !== 'on' && g !== 'arka';
+  const gozBak: Bakis = ayna ? 'izleyici' : g === 'on' ? bak : bak === 'yukari' || bak === 'asagi' ? bak : 'izleyici';
   const [ux, uy] = atkiUcNoktasi(g);
 
-  // ön görünüşte karakterin sağı ekranın solu: ayakkabı/eldiven yönü
-  const sS = g === 'on' ? -1 : 1;
-  const sSol = g === 'on' ? 1 : 1;
-  // başparmak gövdeye doğru (önde), yanda öne doğru
-  const elS = { sag: g === 'on' ? 1 : 1, sol: g === 'on' ? -1 : 1 };
+  // önden: karakterin sağ ayakkabısı ekranın soluna döner; arkadan tersi
+  const ayakS = { sag: g === 'on' ? -1 : g === 'arka' ? 1 : 1, sol: g === 'arka' ? -1 : 1 };
+  // başparmak gövdeye doğru
+  const elS = { sag: g === 'arka' ? -1 : 1, sol: g === 'on' ? -1 : 1 };
 
   const bacak = (taraf: 'sag' | 'sol') => (
     <BacakCiz key={`b${taraf}`} bacak={taraf === 'sag' ? poz.sagBacak : poz.solBacak}
-      x={A.kalcaX[taraf]} s={taraf === 'sag' ? sS : sSol} gorunus={g} />
+      x={A.kalcaX[taraf]} s={ayakS[taraf]} gorunus={g} />
   );
+  const kolAl = (taraf: 'sag' | 'sol') => (taraf === 'sag' ? poz.sagKol : poz.solKol);
   const kol = (taraf: 'sag' | 'sol', katman: KolKatmani) => (
-    <KolCiz key={`k${taraf}${katman}`} kol={taraf === 'sag' ? poz.sagKol : poz.solKol} x={A.omuzX[taraf]}
+    <KolCiz key={`k${taraf}${katman}`} kol={kolAl(taraf)} x={A.omuzX[taraf]}
       s={elS[taraf]} katman={katman} nesne={taraf === 'sag' ? p.sagNesne : p.solNesne} />
   );
-  const yakin: ('sag' | 'sol')[] = A.uzak ? [A.uzak === 'sag' ? 'sol' : 'sag'] : ['sag', 'sol'];
+  const yakinlar: ('sag' | 'sol')[] = A.uzak ? [A.uzak === 'sag' ? 'sol' : 'sag'] : ['sag', 'sol'];
+  // eller arkada olan kollar gövdenin arkasına
+  const arkaKollar = [...(A.uzak ? [A.uzak] : []), ...yakinlar.filter((tf) => kolAl(tf).arkada)];
+  const onKollar = yakinlar.filter((tf) => !kolAl(tf).arkada);
 
-  const atkiDonus = g === 'ucdort' ? 'translate(4 0) scale(0.78 1)' : g === 'on' ? 'scale(0.88 1)' : '';
-  const atkiGorunus: Gorunus = g === 'yan' ? 'yan' : 'on';
+  const atkiDonus = g === 'ucdort' ? `translate(4 0) scale(${ATKI.ucdortOlcek} 1)` : g === 'yan' ? '' : `scale(${ATKI.onOlcek} 1)`;
+  const atkiGorunus: Gorunus = g === 'yan' ? 'yan' : g === 'arka' ? 'arka' : 'on';
   const govdeYari = A.govdeG / 2;
 
+  // atkı ucu: duygu biçimi (geçişte karışır) + follow-through salınımı; dünya dikeyine göre (egim telafisi)
+  const tepki = p.atkiTepki ?? true;
+  const durum: AtkiDurumAdi = p.fikir ? 'fikir' : tepki ? duygu : 'notr';
+  const gecisVar = tepki && !p.fikir && p.oncekiDuygu && p.oncekiDuygu !== duygu && t < 1;
+  const sekil0 = atkiSekli(durum, kare, g);
+  const sekil1 = gecisVar ? atkiKaristir(atkiSekli(p.oncekiDuygu!, kare, g), sekil0, t) : sekil0;
+  const uc = atkiSalinim(sekil1, poz.atki.a1 - poz.egim, poz.atki.a2);
+  const ucX = g === 'ucdort' ? ux * ATKI.ucdortOlcek + 4 : g === 'on' ? ux * ATKI.onOlcek : ux;
+
+  const kaynama = p.kaynama ?? true;
+  const tohum = Math.floor(kare / 4) + 1; // her 4 karede bir yeni çizgi titremesi; deterministik
+
   return (
-    <g transform={`translate(${p.x ?? 0} ${p.y ?? 0}) scale(${(p.olcek ?? 1) * (p.bak === 'sol' ? -1 : 1)} ${p.olcek ?? 1})`}>
+    <g transform={`translate(${p.x ?? 0} ${p.y ?? 0}) scale(${(p.olcek ?? 1) * (ayna ? -1 : 1)} ${p.olcek ?? 1})`}>
       <Tanimlar id={id} />
-      {(p.golge ?? true) && (
-        <ellipse cx={poz.kok.x + (g === 'yan' ? 10 : 0)} cy="2" rx={g === 'yan' ? 62 : 70} ry="8" fill={RENK.golge} />
+      {kaynama && (
+        <defs>
+          <filter id={`${id}-kaynama`} x="-10%" y="-10%" width="120%" height="120%">
+            <feTurbulence type="fractalNoise" baseFrequency="0.03" numOctaves="1" seed={tohum} />
+            <feDisplacementMap in="SourceGraphic" scale="1.6" xChannelSelector="R" yChannelSelector="G" />
+          </filter>
+        </defs>
       )}
-      <g transform={`translate(${poz.kok.x} ${poz.kok.y})`}>
-        {/* arka taraf */}
+      {(p.golge ?? true) && (
+        <ellipse cx={poz.kok.x + A.golgeX} cy="2" rx={A.golgeRx} ry="8" fill={RENK.golge} />
+      )}
+      <g transform={`translate(${poz.kok.x} ${poz.kok.y})`} filter={kaynama ? `url(#${id}-kaynama)` : undefined}>
+        {/* arka taraf: uzak bacak, uzak kol / arkadaki eller */}
         {A.uzak && bacak(A.uzak)}
-        <g transform={`rotate(${poz.egim})`}>{A.uzak && kol(A.uzak, 'hepsi')}</g>
+        <g transform={`rotate(${poz.egim})`}>{arkaKollar.map((tf) => kol(tf, 'hepsi'))}</g>
         {/* bacaklar */}
-        {yakin.map((tf) => bacak(tf))}
+        {yakinlar.map((tf) => bacak(tf))}
         <g transform={`rotate(${poz.egim})`}>
           {/* gövde paneli: atkının altından kalçaya */}
           <path
             d={`M${-govdeYari} ${BOYUN + 6}L${govdeYari} ${BOYUN + 6}L${govdeYari - 1} -6Q${govdeYari - 1} 6 ${govdeYari - 13} 6L${-govdeYari + 13} 6Q${-govdeYari + 1} 6 ${-govdeYari + 1} -6Z`}
             fill={RENK.beyaz} stroke={RENK.murekkep} strokeWidth={OLCU.kontur} strokeLinejoin="round" />
           {/* kollar (borular atkının arkasında) */}
-          {yakin.map((tf) => kol(tf, 'tup'))}
+          {onKollar.map((tf) => kol(tf, 'tup'))}
           {/* kafa */}
           <g transform={`translate(0 ${BOYUN}) rotate(${poz.kafaEgim}) translate(0 ${KAFA - BOYUN})`}>
-            <Kafa id={id} yaw={A.yaw} duygu={duygu} onceki={p.oncekiDuygu} t={t} kare={kare} />
+            <Kafa id={id} yaw={A.yaw} duygu={duygu} onceki={p.oncekiDuygu} t={t} kare={kare}
+              bak={gozBak} agiz={p.agiz ?? 'kapali'} ayna={ayna} arka={g === 'arka'} />
+            {p.fikir && <g transform={`translate(0 ${-OLCU.kafaR - 20}) ${ayna ? 'scale(-1 1)' : ''}`}><Ampul /></g>}
           </g>
-          {/* atkı: sarılı kısım, sarkan uç, önündeki kıvrım/düğüm */}
+          {/* atkı: sarılı kısım, sarkan uç, önündeki kıvrım/düğüm (arkadan uç ve kıvrım görünmez) */}
           <g transform={`translate(0 ${BOYUN})`}>
             <g transform={atkiDonus}><AtkiSarili id={id} gorunus={atkiGorunus} /></g>
-            <g transform={`translate(${g === 'ucdort' ? ux * 0.78 + 4 : g === 'on' ? ux * 0.88 : ux} ${uy})`}>
-              <AtkiUcu id={id} a1={poz.atki.a1 - poz.egim} a2={poz.atki.a2} gorunus={g} />
-            </g>
-            <g transform={atkiDonus}><AtkiOn id={id} gorunus={atkiGorunus} /></g>
+            {g !== 'arka' && (
+              <>
+                {!uc.onde && <g transform={`translate(${ucX} ${uy})`}><AtkiUcu id={id} sekil={uc} /></g>}
+                <g transform={atkiDonus}><AtkiOn id={id} gorunus={atkiGorunus} /></g>
+                {uc.onde && <g transform={`translate(${ucX} ${uy})`}><AtkiUcu id={id} sekil={uc} /></g>}
+              </>
+            )}
           </g>
           {/* eller en önde */}
-          {yakin.map((tf) => kol(tf, 'el'))}
+          {onKollar.map((tf) => kol(tf, 'el'))}
         </g>
       </g>
     </g>

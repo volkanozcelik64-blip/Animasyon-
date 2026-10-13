@@ -49,3 +49,50 @@ export const OLCU = {
   omuzY: -340,
   kafaY: -451,
 } as const;
+
+/** Ayakta toplam boy (kafa tepesi → taban). */
+export const BOY = -(OLCU.kafaY - OLCU.kafaR);
+
+/** Ayakta Nod ekran yüksekliğinin ~%45-55'i olmalı (vars. %50): <Nod olcek={ekranOlcegi(1080)} />. */
+export function ekranOlcegi(ekranYuksekligi: number, oran = 0.5): number {
+  const o = Math.max(0.45, Math.min(0.55, oran));
+  return (ekranYuksekligi * o) / BOY;
+}
+
+export type GorunusAdi = 'on' | 'ucdort' | 'yan' | 'arka';
+
+export interface GorunusAyari {
+  yaw: number; // kafa dönüşü (radyan); yüz parçaları küre üstünde kayar (arka: π, yüz görünmez)
+  govdeG: number; // gövde paneli genişliği
+  omuzX: { sag: number; sol: number };
+  kalcaX: { sag: number; sol: number };
+  /** gövdenin arkasına çizilen taraf */
+  uzak: 'sag' | 'sol' | null;
+  golgeRx: number;
+  golgeX: number;
+}
+
+// önden: karakterin sağı ekranın solunda; arkadan: ekranın sağında
+export const GORUNUS: Record<GorunusAdi, GorunusAyari> = {
+  on: { yaw: 0, govdeG: 46, omuzX: { sag: -30, sol: 30 }, kalcaX: { sag: -16, sol: 16 }, uzak: null, golgeRx: 70, golgeX: 0 },
+  ucdort: { yaw: 0.55, govdeG: 38, omuzX: { sag: -25, sol: 21 }, kalcaX: { sag: -13, sol: 11 }, uzak: 'sol', golgeRx: 70, golgeX: 0 },
+  yan: { yaw: 0.92, govdeG: 30, omuzX: { sag: 1, sol: -4 }, kalcaX: { sag: 2, sol: -5 }, uzak: 'sol', golgeRx: 62, golgeX: 10 },
+  arka: { yaw: Math.PI, govdeG: 46, omuzX: { sag: 30, sol: -30 }, kalcaX: { sag: 16, sol: -16 }, uzak: null, golgeRx: 70, golgeX: 0 },
+};
+
+/** Atkı: önden görünüşte genişlik ölçeği; sarkan ucun bağlandığı nokta (boyun yerelinde). */
+export const ATKI = {
+  onOlcek: 0.88,
+  ucdortOlcek: 0.78,
+  ucGenislik: 27,
+  ucGenislikYan: 22,
+  ucBoy: 46,
+} as const;
+
+/** Konuşma ağız şekilleri (§8). */
+export const AGIZLAR = ['kapali', 'A', 'E', 'I', 'O', 'U', 'MBP', 'FV'] as const;
+export type Agiz = (typeof AGIZLAR)[number];
+
+/** Bakış yönü (§2): göz bebekleri bu kadar kayar, yüz bunun yarısı kadar. */
+export type Bakis = 'sol' | 'sag' | 'yukari' | 'asagi' | 'izleyici';
+export const BAKIS_KAYMA = 7;

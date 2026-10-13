@@ -4,7 +4,11 @@ import { OLCU } from './olculer';
 
 /** Bir taraf (sag = karakterin sağı; önden bakışta ekranın solu). Açılar SVG derecesi:
  *  0 = aşağı sarkıyor, + saat yönü. Dirsek/diz/bilek bir önceki parçaya göredir. */
-export interface Kol { omuz: number; dirsek: number; bilek: number; el: ElPozu; ayna?: boolean }
+export interface Kol {
+  omuz: number; dirsek: number; bilek: number; el: ElPozu; ayna?: boolean;
+  /** kol gövdenin arkasında çizilir (eller arkada) */
+  arkada?: boolean;
+}
 export interface Bacak { kalca: number; diz: number; ayak?: number /* ayakkabının mutlak açısı, vars. 0 = yere paralel */ }
 
 export interface Poz {
@@ -23,6 +27,13 @@ export interface Poz {
 const ON_SARKIK = 13;
 
 export const AYAKTA: Record<Gorunus, Poz> = {
+  arka: {
+    gorunus: 'arka', kok: { x: 0, y: OLCU.kalcaY }, egim: 0, kafaEgim: 0,
+    sagKol: { omuz: -ON_SARKIK, dirsek: 3, bilek: 0, el: 'acik' },
+    solKol: { omuz: ON_SARKIK, dirsek: -3, bilek: 0, el: 'acik' },
+    sagBacak: { kalca: -4.5, diz: 0 }, solBacak: { kalca: 4.5, diz: 0 },
+    atki: { a1: 0, a2: 0 },
+  },
   on: {
     gorunus: 'on', kok: { x: 0, y: OLCU.kalcaY }, egim: 0, kafaEgim: 0,
     sagKol: { omuz: ON_SARKIK, dirsek: -3, bilek: 0, el: 'acik' },
@@ -76,11 +87,61 @@ export const ISARET_EDEN: Poz = {
   atki: { a1: 8, a2: -4 },
 };
 
+// ---------------------------------------------------------------- ek duygu pozları (§3)
+// Açılar önden bakış için hesaplandı (omuz/dirsek/bilek zinciri; uzuv boyları sabit).
+export const DUYGU_POZLARI: Partial<Record<Duygu, Poz>> = {
+  /** eli çenesinde, gözler yukarı */
+  dusunceli: {
+    ...AYAKTA.on,
+    sagKol: { omuz: 17, dirsek: -163, bilek: 0, el: 'yumruk' },
+    kafaEgim: -4,
+    atki: { a1: 0, a2: 0 },
+  },
+  /** kollar hafif açılır */
+  sasirmis: {
+    ...AYAKTA.on,
+    sagKol: { omuz: 34, dirsek: -28, bilek: 0, el: 'salla', ayna: true },
+    solKol: { omuz: -34, dirsek: 28, bilek: 0, el: 'salla', ayna: true },
+    atki: { a1: 0, a2: 0 },
+  },
+  /** eller belde (önden), çene hafif yukarıda */
+  gururlu: {
+    ...AYAKTA.on,
+    kafaEgim: 0,
+    // dirsekler dışarıda, yumruklar kalça yanında aşağı bakar (el gövde kenarının dışında)
+    sagKol: { omuz: 45, dirsek: -79, bilek: 34, el: 'yumruk' },
+    solKol: { omuz: -45, dirsek: 79, bilek: -34, el: 'yumruk' },
+    atki: { a1: 0, a2: 0 },
+  },
+  /** yanağı ele dayalı, kafa ele doğru eğik */
+  sikilmis: {
+    ...AYAKTA.on,
+    solKol: { omuz: -74, dirsek: -136, bilek: 20, el: 'acik', ayna: true },
+    kafaEgim: 8,
+    atki: { a1: 0, a2: 0 },
+  },
+  /** eller arkada, kafa hafif eğik */
+  utangac: {
+    ...AYAKTA.on,
+    sagKol: { omuz: -4, dirsek: -55, bilek: 0, el: 'acik', arkada: true },
+    solKol: { omuz: 4, dirsek: 55, bilek: 0, el: 'acik', arkada: true },
+    kafaEgim: -6,
+    atki: { a1: 0, a2: 0 },
+  },
+};
+
+/** Fikir anı: işaret parmağı havada (atkı ünlem gibi dikleşir, ampul belirir: <Nod fikir />). */
+export const FIKIR: Poz = {
+  ...AYAKTA.on,
+  solKol: { omuz: -150, dirsek: -12, bilek: 0, el: 'isaret', ayna: true },
+  atki: { a1: 0, a2: 0 },
+};
+
 // ---------------------------------------------------------------- ara değer (yumuşak geçiş)
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const kolKar = (a: Kol, b: Kol, t: number): Kol => ({
   omuz: lerp(a.omuz, b.omuz, t), dirsek: lerp(a.dirsek, b.dirsek, t), bilek: lerp(a.bilek, b.bilek, t),
-  el: t < 0.5 ? a.el : b.el, ayna: t < 0.5 ? a.ayna : b.ayna,
+  el: t < 0.5 ? a.el : b.el, ayna: t < 0.5 ? a.ayna : b.ayna, arkada: t < 0.5 ? a.arkada : b.arkada,
 });
 const bacakKar = (a: Bacak, b: Bacak, t: number): Bacak => ({
   kalca: lerp(a.kalca, b.kalca, t), diz: lerp(a.diz, b.diz, t), ayak: lerp(a.ayak ?? 0, b.ayak ?? 0, t),
