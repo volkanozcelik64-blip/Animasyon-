@@ -60,13 +60,14 @@ const Kalp: React.FC<{ olcek?: number }> = ({ olcek = 1 }) => (
 /** Gözleri açık nokta olan duygular: bakışta göz bebeği kenara kadar kayar, aşağı bakışta göz kapağı iner. */
 const ACIK_GOZ: Duygu[] = ['sakin', 'notr', 'sasirmis', 'dusunceli', 'utangac', 'kafasi_karisik', 'heyecanli'];
 
-function yuzParcalari(d: Duygu, id: string, P: Yerlestir, bak: Bakis, agiz: Agiz, kirp = 0): React.ReactNode[] {
+function yuzParcalari(d: Duygu, id: string, P: Yerlestir, bak: Bakis, agiz: Agiz, kirp = 0, sadeceGoz = false): React.ReactNode[] {
   const [bx, by] = bakisKaymasi(bak);
   const acik = ACIK_GOZ.includes(d);
   // göz bebekleri (g*) göz alanının kenarına kadar kayar; kapalı/kalp gözler az kayar.
   // Kafanın dönüşü/eğimi (yüzün tamamı) Nod.tsx'te yaw ve dikey kayma olarak eklenir.
   const g = (ax: number, ay: number, el: React.ReactNode, k: string) => {
     if (k === 'a' && agiz !== 'kapali') return null;
+    if (sadeceGoz && k[0] !== 'g') return null;
     if (k[0] === 'g') {
       const o = acik ? 1 : 0.35;
       // göz kırpma: göz dikeyde kapanır (en fazla %90)
@@ -77,7 +78,7 @@ function yuzParcalari(d: Duygu, id: string, P: Yerlestir, bak: Bakis, agiz: Agiz
     const kas = k[0] === 'k' && bak === 'yukari' ? -BAKIS.kasKalkma : 0;
     return P(ax, ay + kas, el, k, ax === 0 ? 26 : 11);
   };
-  const konusma = agiz !== 'kapali' ? [P(0, 31, <AgizSekli agiz={agiz} />, 'ka', 20)] : [];
+  const konusma = agiz !== 'kapali' && !sadeceGoz ? [P(0, 31, <AgizSekli agiz={agiz} />, 'ka', 20)] : [];
   return [...duyguYuzu(d, id, g), ...konusma];
 }
 
@@ -356,9 +357,9 @@ export const YuzTonu: React.FC<{ duygu: Duygu; id: string }> = ({ duygu, id }) =
   return null;
 };
 
-export const YuzOzellikleri: React.FC<{ duygu: Duygu; id: string; yaw: number; bak?: Bakis; agiz?: Agiz; kirp?: number }> = ({
-  duygu, id, yaw, bak = 'izleyici', agiz = 'kapali', kirp = 0,
-}) => <g>{yuzParcalari(duygu, id, yerlestirici(yaw), bak, agiz, kirp)}</g>;
+export const YuzOzellikleri: React.FC<{ duygu: Duygu; id: string; yaw: number; bak?: Bakis; agiz?: Agiz; kirp?: number; sadeceGoz?: boolean }> = ({
+  duygu, id, yaw, bak = 'izleyici', agiz = 'kapali', kirp = 0, sadeceGoz = false,
+}) => <g>{yuzParcalari(duygu, id, yerlestirici(yaw), bak, agiz, kirp, sadeceGoz)}</g>;
 
 // ---------------------------------------------------------------- ekler (ayrı katman, hareketli)
 const dalga = (k: number, hiz: number, faz = 0) => Math.sin(k * hiz + faz);

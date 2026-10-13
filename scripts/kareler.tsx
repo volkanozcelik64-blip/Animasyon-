@@ -7,9 +7,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as Temel from '../src/sahneler/NodTemel';
 import * as Konusma from '../src/sahneler/NodKonusma';
+import * as Pil from '../src/sahneler/NodPil';
+import { yaziCss } from './yazi';
 
 // SAHNE=konusma npx tsx scripts/kareler.tsx … → lip sync sahnesi
-const sahneler = { temel: Temel, konusma: Konusma } as const;
+const sahneler = { temel: Temel, konusma: Konusma, pil: Pil } as const;
 const { Sahne, GENISLIK, YUKSEKLIK } = sahneler[(process.env.SAHNE as keyof typeof sahneler) ?? 'temel'] ?? Temel;
 
 const KOK = path.resolve(__dirname, '..');
@@ -30,7 +32,8 @@ async function main() {
   const satir = Math.ceil(kareler.length / SUTUN);
   const w = SUTUN * (W + 6), h = satir * (H + 6);
   await sayfa.setViewportSize({ width: Math.ceil(w), height: Math.ceil(h) });
-  await sayfa.setContent(`<body style="margin:0;background:#eee"><div style="display:grid;grid-template-columns:repeat(${SUTUN},${W + 4}px);gap:2px">${kareler.map(hucre).join('')}</div></body>`);
+  await sayfa.setContent(`<html><head>${yaziCss()}</head><body style="margin:0;background:#eee"><div style="display:grid;grid-template-columns:repeat(${SUTUN},${W + 4}px);gap:2px">${kareler.map(hucre).join('')}</div></body>`);
+  await sayfa.evaluate(() => document.fonts.ready);
   fs.mkdirSync(path.dirname(cikti), { recursive: true });
   await sayfa.screenshot({ path: cikti });
   console.log('yazıldı', path.relative(KOK, cikti));

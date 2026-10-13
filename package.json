@@ -9,7 +9,9 @@
     "render:temel": "remotion render src/index.ts NodTemel video/nod-temel.mp4 --codec=h264 --browser-executable=/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell --public-dir=assets",
     "render:konusma": "remotion render src/index.ts NodKonusma video/nod-konusma.mp4 --codec=h264 --browser-executable=/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell --public-dir=assets",
     "ses:analiz": "tsx scripts/ses-analiz.ts",
-    "seslendir": "NODE_USE_ENV_PROXY=1 tsx scripts/seslendir.ts"
+    "seslendir": "NODE_USE_ENV_PROXY=1 tsx scripts/seslendir.ts",
+    "render:pil": "remotion render src/index.ts NodPil video/nod-pil.mp4 --codec=h264 --browser-executable=/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell --public-dir=assets",
+    "sfx": "python3 scripts/sfx-uret.py"
   },
   "keywords": [],
   "author": "",

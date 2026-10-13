@@ -56,6 +56,14 @@ export interface NodProps {
   atkiUnlem?: boolean;
   /** havadayken atkı ucu yukarı savrulur: 0 … 1 */
   atkiHavada?: number;
+  /** atkı ucunun biçimini duygudan bağımsız zorla (ör. 'fikir' = dimdik, 'asik' = kalp); atkiDurum2 + atkiKarisim ile ikisi arası */
+  atkiDurum?: AtkiDurumAdi;
+  atkiDurum2?: AtkiDurumAdi;
+  atkiKarisim?: number;
+  /** kafanın dönüşünü (yaw, radyan) görünüşten bağımsız ver: 0 = yüz izleyiciye (ör. yandan yatarken kameraya bakış) */
+  kafaYaw?: number;
+  /** karanlık: gövde görünmez; yalnız beyaz gözler ve soluk atkı */
+  karanlik?: boolean;
   /** hata ayıklama: atkı ucunun bezier kontrol noktalarını göster */
   atkiKontrol?: boolean;
   /** çizgi kaynaması (§6): konturlar her 4 karede 1-2px değişir. Vars. açık. */
@@ -106,8 +114,8 @@ function BacakCiz({ bacak, x, s, gorunus }: { bacak: Bacak; x: number; s: number
 const Kafa: React.FC<{
   id: string; yaw: number; duygu: Duygu; onceki?: Duygu; t: number; kare: number;
   bak: Bakis; agiz: Agiz; ayna: boolean; arka: boolean;
-  kirp: number; bas: number; kafaDonus: number;
-}> = ({ id, yaw, duygu, onceki, t, kare, bak, agiz, ayna, arka, kirp, bas, kafaDonus }) => {
+  kirp: number; bas: number; kafaDonus: number; karanlik?: boolean;
+}> = ({ id, yaw, duygu, onceki, t, kare, bak, agiz, ayna, arka, kirp, bas, kafaDonus, karanlik }) => {
   const R = OLCU.kafaR;
   const sikis = 1 - 0.28 * Math.sin(Math.PI * t); // geçişte yüz hafifçe büzülüp açılır (kırpışma)
   const [donus, egim] = bakisKafa(bak); // bakış yönüne kafa ~5° döner/eğilir
@@ -121,6 +129,16 @@ const Kafa: React.FC<{
   const ek = (d: Duygu, op: number, key: string) =>
     op <= 0.001 ? null : <g key={key} opacity={op}><Ekler duygu={d} kare={kare} yaw={arka ? 0 : yaw} ayna={ayna} /></g>;
   const gecisVar = onceki && onceki !== duygu && t < 1;
+  if (karanlik) {
+    // karanlıkta yalnız gözler görünür: siyah göz bebekleri beyaza çevrilir
+    return (
+      <g style={{ filter: 'invert(1)' }}>
+        <g transform={`translate(0 ${2 + egim + bas * 10}) scale(1.12 ${1.12 * sikis})`}>
+          <YuzOzellikleri duygu={duygu} id={id} yaw={yaw + donus + kafaDonus} bak={bak} kirp={kirp} sadeceGoz />
+        </g>
+      </g>
+    );
+  }
   return (
     <g>
       <circle r={R} fill={RENK.beyaz} />
@@ -196,8 +214,10 @@ export const Nod: React.FC<NodProps> = (p) => {
   const tepki = p.atkiTepki ?? true;
   const unlem = p.atkiUnlem ?? !!p.fikir;
   const durum: AtkiDurumAdi = unlem ? 'fikir' : tepki ? duygu : 'notr';
-  const gecisVar = tepki && !unlem && p.oncekiDuygu && p.oncekiDuygu !== duygu && t < 1;
-  const sekil0 = atkiSekli(durum, kare, g);
+  const gecisVar = tepki && !unlem && !p.atkiDurum && p.oncekiDuygu && p.oncekiDuygu !== duygu && t < 1;
+  const sekil0 = p.atkiDurum
+    ? (p.atkiDurum2 ? atkiKaristir(atkiSekli(p.atkiDurum, kare, g), atkiSekli(p.atkiDurum2, kare, g), p.atkiKarisim ?? 0) : atkiSekli(p.atkiDurum, kare, g))
+    : atkiSekli(durum, kare, g);
   const sekil1a = gecisVar ? atkiKaristir(atkiSekli(p.oncekiDuygu!, kare, g), sekil0, t) : sekil0;
   const sekil1 = p.atkiHavada ? atkiKaristir(sekil1a, atkiSekli('havada', kare, g), p.atkiHavada) : sekil1a;
   // güçlü geriye savrulmada (yürüme/koşma) uç uzar ve dalgalanır
@@ -227,26 +247,26 @@ export const Nod: React.FC<NodProps> = (p) => {
       )}
       <g transform={`translate(${poz.kok.x} ${poz.kok.y})`} filter={kaynama ? `url(#${id}-kaynama)` : undefined}>
         {/* arka taraf: uzak bacak, uzak kol / arkadaki eller */}
-        {A.uzak && bacak(A.uzak)}
-        <g transform={`rotate(${poz.egim})`}>{arkaKollar.map((tf) => kol(tf, 'hepsi'))}</g>
+        {!p.karanlik && A.uzak && bacak(A.uzak)}
+        {!p.karanlik && <g transform={`rotate(${poz.egim})`}>{arkaKollar.map((tf) => kol(tf, 'hepsi'))}</g>}
         {/* bacaklar */}
-        {yakinlar.map((tf) => bacak(tf))}
+        {!p.karanlik && yakinlar.map((tf) => bacak(tf))}
         <g transform={`rotate(${poz.egim})`}>
           {/* gövde paneli: atkının altından kalçaya */}
-          <path
+          {!p.karanlik && <path
             d={`M${-govdeYari} ${BOYUN + 6}L${govdeYari} ${BOYUN + 6}L${govdeYari - 1} -6Q${govdeYari - 1} 6 ${govdeYari - 13} 6L${-govdeYari + 13} 6Q${-govdeYari + 1} 6 ${-govdeYari + 1} -6Z`}
-            fill={RENK.beyaz} stroke={RENK.murekkep} strokeWidth={CIZGI.govde} strokeLinejoin="round" />
+            fill={RENK.beyaz} stroke={RENK.murekkep} strokeWidth={CIZGI.govde} strokeLinejoin="round" />}
           {/* kollar (borular atkının arkasında) */}
-          {onKollar.map((tf) => kol(tf, 'tup'))}
+          {!p.karanlik && onKollar.map((tf) => kol(tf, 'tup'))}
           {/* kafa */}
           <g transform={`translate(0 ${BOYUN}) rotate(${poz.kafaEgim}) translate(0 ${KAFA - BOYUN + (p.bas ?? 0) * 3})`}>
-            <Kafa id={id} yaw={A.yaw} duygu={duygu} onceki={p.oncekiDuygu} t={t} kare={kare}
+            <Kafa id={id} yaw={p.kafaYaw ?? A.yaw} duygu={duygu} onceki={p.oncekiDuygu} t={t} kare={kare}
               kirp={p.kirp ?? 0} bas={p.bas ?? 0} kafaDonus={p.kafaDonus ?? 0}
-              bak={gozBak} agiz={p.agiz ?? 'kapali'} ayna={ayna} arka={g === 'arka'} />
+              bak={gozBak} agiz={p.agiz ?? 'kapali'} ayna={ayna} arka={g === 'arka'} karanlik={p.karanlik} />
             {p.fikir && <g transform={`translate(0 ${-OLCU.kafaR - 20}) ${ayna ? 'scale(-1 1)' : ''}`}><Ampul parlama={p.fikirParlama ?? 1} /></g>}
           </g>
           {/* atkı: sarılı kısım, sarkan uç, önündeki kıvrım/düğüm (arkadan uç ve kıvrım görünmez) */}
-          <g transform={`translate(0 ${BOYUN})`}>
+          <g transform={`translate(0 ${BOYUN})`} opacity={p.karanlik ? 0.3 : 1}>
             <g transform={atkiDonus}><AtkiSarili id={id} gorunus={atkiGorunus} /></g>
             {g === 'arka' ? (
               // arkadan: düğüm ensede, uç ondan sarkar (uç düğümün altından çıkar)
@@ -264,7 +284,7 @@ export const Nod: React.FC<NodProps> = (p) => {
             )}
           </g>
           {/* eller en önde */}
-          {onKollar.map((tf) => kol(tf, 'el'))}
+          {!p.karanlik && onKollar.map((tf) => kol(tf, 'el'))}
         </g>
       </g>
     </g>

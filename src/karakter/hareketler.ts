@@ -134,8 +134,8 @@ export const OTURMA_ILERI = OLCU.ustBacak + OLCU.altBacak * Math.sin((8 * Math.P
  * Otur: p 0 → 1. Kalça (0,0 = oturak) yerel; ayaklar başta kalçanın altında, sonuna kadar yerinde (IK).
  * Anticipation: önce gövde öne eğilir ve kalça geri itilir, sonra iner, oturakta hafif yaylanır.
  */
-export function otur(p: number): Poz {
-  const A = GORUNUS.yan;
+export function otur(p: number, gorunus: 'yan' | 'ucdort' = 'yan'): Poz {
+  const A = GORUNUS[gorunus];
   const ayakX = (tf: 'sag' | 'sol') => OTURMA_ILERI + A.kalcaX[tf];
   const inis = yumusak(aralik(p, 0.12, 0.85));
   const kx = OTURMA_ILERI * (1 - inis);
@@ -152,19 +152,20 @@ export function otur(p: number): Poz {
   };
   return {
     ...OTURAN,
+    gorunus,
     kok: { x: kx, y: ky },
     egim,
     kafaEgim: -egim * 0.35, // kafa gövdeden geç gelir, dik kalmaya çalışır
-    sagKol: kol(AYAKTA.yan.sagKol, OTURAN.sagKol),
-    solKol: kol(AYAKTA.yan.solKol, OTURAN.solKol),
+    sagKol: kol(AYAKTA[gorunus].sagKol, OTURAN.sagKol),
+    solKol: kol(AYAKTA[gorunus].solKol, OTURAN.solKol),
     sagBacak: { ...sag, ayak: 0 },
     solBacak: { ...sol, ayak: 0 },
   };
 }
 
 /** Kalk: p 0 → 1. Gövde öne eğilir, eller dizlere basar, bacaklar açılır, kafa en son yerine oturur. */
-export function kalk(p: number): Poz {
-  const A = GORUNUS.yan;
+export function kalk(p: number, gorunus: 'yan' | 'ucdort' = 'yan'): Poz {
+  const A = GORUNUS[gorunus];
   const ayakX = (tf: 'sag' | 'sol') => OTURMA_ILERI + A.kalcaX[tf];
   const kalkis = yumusak(aralik(p, 0.3, 0.9));
   const kx = OTURMA_ILERI * kalkis;
@@ -182,11 +183,12 @@ export function kalk(p: number): Poz {
   const egimGec = 34 * Math.sin(Math.PI * aralik(p - 0.08, 0, 0.92));
   return {
     ...OTURAN,
+    gorunus,
     kok: { x: kx, y: ky },
     egim,
     kafaEgim: -(egim - egimGec) * 0.8 - egim * 0.25,
-    sagKol: kol(OTURAN.sagKol, AYAKTA.yan.sagKol),
-    solKol: kol(OTURAN.solKol, AYAKTA.yan.solKol),
+    sagKol: kol(OTURAN.sagKol, AYAKTA[gorunus].sagKol),
+    solKol: kol(OTURAN.solKol, AYAKTA[gorunus].solKol),
     sagBacak: { ...sag, ayak: 0 },
     solBacak: { ...sol, ayak: 0 },
   };
@@ -379,3 +381,37 @@ export function onay(k: number): number {
 }
 
 export { pozKaristir };
+
+// ---------------------------------------------------------------- ileri kinematik (sahneler için)
+const R2D = 180 / Math.PI;
+const dondur = (p: V, a: number): V => {
+  const c = Math.cos(a / R2D), n = Math.sin(a / R2D);
+  return { x: p.x * c - p.y * n, y: p.x * n + p.y * c };
+};
+
+/** Bir kolun bileği, elin yönü ve avuç merkezi (Nod yereli: sağa bakan, zemin 0, x=0 Nod'un kökü). */
+export function elKonumu(poz: Poz, taraf: 'sag' | 'sol'): { bilek: V; avuc: V; aci: number } {
+  const A = GORUNUS[poz.gorunus];
+  const kol = taraf === 'sag' ? poz.sagKol : poz.solKol;
+  const omuz = { x: A.omuzX[taraf], y: OMUZ_Y };
+  const d1 = yonV(kol.omuz), d2 = yonV(kol.omuz + kol.dirsek);
+  const bilekG = { x: omuz.x + d1.x * OLCU.ustKol + d2.x * OLCU.onKol, y: omuz.y + d1.y * OLCU.ustKol + d2.y * OLCU.onKol };
+  const elAci = kol.omuz + kol.dirsek + kol.bilek;
+  const d3 = yonV(elAci);
+  const avucG = { x: bilekG.x + d3.x * 14 * OLCU.elOlcek, y: bilekG.y + d3.y * 14 * OLCU.elOlcek };
+  const g = (p: V) => { const r = dondur(p, poz.egim); return { x: r.x + poz.kok.x, y: r.y + poz.kok.y }; };
+  return { bilek: g(bilekG), avuc: g(avucG), aci: elAci + poz.egim };
+}
+
+/** Kafa merkezi ve ağız noktası (Nod yereli). */
+export function kafaKonumu(poz: Poz): { merkez: V; agiz: V } {
+  const boyun = OLCU.boyunY - OLCU.kalcaY, kafa = OLCU.kafaY - OLCU.kalcaY;
+  const m = dondur({ x: 0, y: boyun }, poz.egim);
+  const k = dondur(dondur({ x: 0, y: kafa - boyun }, poz.kafaEgim), poz.egim);
+  const merkez = { x: m.x + k.x + poz.kok.x, y: m.y + k.y + poz.kok.y };
+  const ileri = poz.gorunus === 'yan' ? 40 : poz.gorunus === 'ucdort' ? 20 : 0;
+  const a = dondur({ x: ileri, y: 36 }, poz.egim + poz.kafaEgim);
+  return { merkez, agiz: { x: merkez.x + a.x, y: merkez.y + a.y } };
+}
+
+function yonV(a: number): V { return { x: -Math.sin(a / R2D), y: Math.cos(a / R2D) }; }

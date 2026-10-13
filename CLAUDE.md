@@ -9,6 +9,15 @@
   ve sahne yapısı (saf `sahneKaresi(kare)` + sıralı zaman çizelgesi). Render: `npm run render:temel`.
 - Render'dan önce kritik kareleri `npm run kareler -- <kare,kare,...> <çıktı.png> [x,y,w,h]` ile çıkarıp kontrol et.
 
+## Konuşma balonları (seslendirme YOK)
+- Nod konuşmaz; replikler `<Balon />` (`src/karakter/Balon.tsx`) ile gösterilir. Seslendirme/TTS kullanılmaz.
+- Stil: beyaz dolgu, kalın siyah kontur, kuyruk ağza doğru; el yazısı, kalın, BÜYÜK HARF yazı (Patrick Hand, `assets/fonts/`, aile `NodYazi`; Remotion'da `Root.tsx` FontFace + delayRender ile yükler).
+- Tipler: `normal` (yuvarlak), `bagirma` (dikenli, büyük yazı, titrer), `fisilti` (kesikli kontur, küçük yazı), `dusunce` (bulut, kuyruk yerine küçük daireler).
+- Animasyon: yayla "pop" açılış → daktilo yazı → kısa küçülerek kapanış. Her kelime ekranda ≥0,3 sn (`balonSuresi`).
+- Balon yazılırken Nod'un ağzı sessizce açılıp kapanır (`sessizAgiz`), baş sallamaları sürer. Balon yüzü kapatmaz; düşünce/fısıltı kuyruğu baş üstüne yönelir. Karanlıkta `karanlik` (siyah dolgu, beyaz kontur).
+- Ses efektleri sentezlenir: `npm run sfx` → `assets/sfx/*.wav`; sahne `SESLER` listesiyle `<Sequence><Audio/></Sequence>`.
+- Örnek: "1% Battery" `src/sahneler/NodPil.tsx` → `npm run render:pil` → `video/nod-pil.mp4` (35 sn, 1920×1080, 30 fps). Kontrol: `SAHNE=pil npm run kareler -- …`.
+
 ## Pipeline (current): Mixamo + Blender, flat 2D cartoon look
 - Blender runs headless only: `blender -b -P script.py [-- args]` (Ubuntu package, Blender 4.0.2; EEVEE renders via Mesa software EGL).
 - `blender/build_nod.py` builds Nod and exports `nod_tpose.fbx`: T-pose, ONE joined mesh (<10k tris, no armature/animation/modifiers/extra objects), exactly 1.80 m, origin at the feet, facing -Y, metres; FBX written Y-up with `bake_space_transform=True` + `FBX_SCALE_UNITS` (no rotation on the FBX model node — otherwise Mixamo shows it huge/off-centre).
