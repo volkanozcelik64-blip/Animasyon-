@@ -188,8 +188,7 @@ Bulut ortamında Remotion'un kendi Chrome'unu indirmek yerine
 `--browser-executable=/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell`.
 
 Test videosu (`DuyguTesti`, hazır çıktı `video/duygu-testi.mp4`), yalnızca `hareketler` listesiyle:
-mutlu yürüyerek girer → sandalyeye oturur → düşünceli olur (düşünce balonu) → fikir! ampul yanar,
-heyecanlanır → öne eğilip kalkar → iki kez zıplar.
+mutlu yürüyerek girer → sandalyeye oturur → düşünceli olur (düşünce balonu) → heyecanlanır → öne eğilip kalkar → iki kez zıplar.
 
 Yazı tipleri: Patrick Hand ve PT Sans Narrow (SIL Open Font License), `assets/fonts/`.
 

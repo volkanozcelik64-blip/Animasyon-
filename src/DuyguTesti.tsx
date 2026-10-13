@@ -19,7 +19,7 @@ export const ADIMLAR: HareketAdimi[] = [
   {hareket: 'zipla', baslangic: 252, yukseklik: 62},
 ];
 
-const S = {dusunYuz: 90, fikir: 184, heyecanYuz: 190};
+const S = {dusunYuz: 90, fikir: 184, heyecanYuz: 190}; // fikir: düşünce balonu söner
 
 const Etiket: React.FC<{yazi: string; opak: number; y: number}> = ({yazi, opak, y}) => (
   <div
@@ -37,20 +37,6 @@ const Etiket: React.FC<{yazi: string; opak: number; y: number}> = ({yazi, opak, 
   >
     {yazi}
   </div>
-);
-
-const Ampul: React.FC<{olcek: number; parilti: number}> = ({olcek, parilti}) => (
-  <svg viewBox="-60 -70 120 140" width={240} height={280} style={{overflow: 'visible'}}>
-    <g transform={`scale(${olcek})`} stroke={MUREKKEP} strokeWidth={4} strokeLinecap="round" strokeLinejoin="round">
-      <g opacity={parilti} fill="none" strokeWidth={4} transform={`scale(${0.8 + 0.2 * parilti})`}>
-        <path d="M0 -62 L0 -50 M-44 -40 L-35 -32 M44 -40 L35 -32 M-54 -2 L-42 -2 M54 -2 L42 -2" />
-      </g>
-      <path d="M-14 26 Q-14 12 -22 4 Q-34 -10 -28 -26 Q-20 -44 0 -44 Q20 -44 28 -26 Q34 -10 22 4 Q14 12 14 26 Z" fill="#ffe36b" />
-      <path d="M-8 22 L-4 2 L0 10 L4 2 L8 22" fill="none" strokeWidth={2.6} />
-      <rect x={-14} y={26} width={28} height={16} rx={4} fill="#c9c6c0" />
-      <path d="M-14 33 L14 33" strokeWidth={2.6} />
-    </g>
-  </svg>
 );
 
 const DusunceBalonu: React.FC<{f: number; fps: number}> = ({f, fps}) => (
@@ -110,9 +96,6 @@ export const DuyguTesti: React.FC = () => {
 
   const balonBas = S.dusunYuz + 22;
   const balonCik = 1 - spring({frame: f - (S.fikir - 2), fps, config: {damping: 200}, durationInFrames: 8});
-  const ampul = spring({frame: f - S.fikir, fps, config: {damping: 8, stiffness: 170}});
-  const ampulCik = 1 - spring({frame: f - 214, fps, config: {damping: 200}, durationInFrames: 12});
-  const parilti = spring({frame: f - S.fikir - 4, fps, config: {damping: 10}});
 
   return (
     <AbsoluteFill>
@@ -124,11 +107,6 @@ export const DuyguTesti: React.FC = () => {
       {f >= balonBas && balonCik > 0.001 && (
         <div style={{position: 'absolute', left: kafaX + 80, top: kafaY - 400, opacity: balonCik}}>
           <DusunceBalonu f={f - balonBas} fps={fps} />
-        </div>
-      )}
-      {f >= S.fikir && ampulCik > 0.001 && (
-        <div style={{position: 'absolute', left: kafaX - 120, top: kafaY - 470 - (1 - ampulCik) * 40, opacity: ampulCik}}>
-          <Ampul olcek={ampul} parilti={parilti} />
         </div>
       )}
 
