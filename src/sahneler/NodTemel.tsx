@@ -1,4 +1,4 @@
-// 18 sn test: Nod soldan sekerek girer → giris → sandalyeye oturur → düşünceli → fikir → kalkıp heyecanla zıplar → onay.
+// nod-temel (18 sn): bundan sonraki videoların temeli. Nod soldan sekerek girer → giris → sandalyeye oturur → düşünceli → fikir → kalkar, sandalyeden bir adım uzaklaşır, heyecanla iki kez zıplar → onay.
 // 1920x1080, 30 fps (§11). Sahne saf bir fonksiyondur (kare → çizim); Remotion bileşeni yalnızca kareyi verir,
 // böylece önizleme PNG'leri ve video aynı kareleri çizer.
 import React from 'react';
@@ -9,7 +9,7 @@ import type { Duygu } from '../karakter/yuz';
 import { AtkiYayi, type AtkiDurumu } from '../karakter/atki';
 import {
   yuru, otur, kalk, zipla, giris, fikir, onay, nefes, gozKirp, yaylanma, ayaktaCok,
-  aralik, yumusak, OTURMA_ILERI, ZIPLA_SURE, GIRIS_SURE, FIKIR_SURE, ONAY_SURE, YURU,
+  adim, aralik, yumusak, OTURMA_ILERI, ZIPLA_SURE, GIRIS_SURE, FIKIR_SURE, ONAY_SURE, YURU, ADIM_SURE,
 } from '../karakter/hareketler';
 import { bilekNerede, yon } from '../karakter/ik';
 import { SandalyeArka, SandalyeOn } from '../esyalar/Sandalye';
@@ -23,32 +23,38 @@ const S = ekranOlcegi(YUKSEKLIK, 0.5); // ayakta ekranın %50'si
 const ZEMIN = 960; // ayak tabanı (px)
 const CX = 820 / S; // sandalye (Nod birimi, dünya)
 const XS = CX - OTURMA_ILERI; // Nod'un sandalyenin önünde durduğu yer (kalça)
-const BASLA = -130; // yürüyüş başlangıcı (kalça, ekran dışı)
+const BASLA = -60; // yürüyüş başlangıcı: ilk karelerde yüzü kadrajın sol kenarından girer
+const ADIM_MESAFE = 150; // kalktıktan sonra sandalyeden uzaklaşma (≥ kafa genişliği 132)
+const XJ = XS - ADIM_MESAFE; // zıplama ve onay yeri: ayaklar sandalyenin oturağına denk gelmez
 
-// zaman çizelgesi (kare). Ana hareketler arasında 8 karelik nefes payı (poz tutulur, nefes + göz kırpma sürer).
-const NEFES = 8;
-const Z = {
-  yuru: [0, 90],
-  don1: [98, 104],
-  giris: [104, 104 + GIRIS_SURE], // 104–164
-  don2: [172, 178],
-  otur: [178, 214],
-  dus: [222, 300], // el çeneye 12 karede gelir, poz 2+ sn kalır; atkı ucu yavaşça daire çizer
-  fikir: [300, 300 + FIKIR_SURE], // ampul 300, 0,5 sn duraksama, parmak 315
-  kalk: [352, 382],
-  don3: [390, 394], // yan → 3/4 (izleyiciye dönük)
-  zipla1: [394, 394 + ZIPLA_SURE],
-  zipla2: [394 + ZIPLA_SURE + 4, 394 + 2 * ZIPLA_SURE + 4], // 442–486
-  don4: [494, 498], // 3/4 → önden
-  onay: [498, 498 + ONAY_SURE],
-} as const;
+// zaman çizelgesi (kare): sırayla süreler. Ana hareketler arasında 6-8 karelik nefes payı
+// (poz tutulur; nefes ve göz kırpma sürer).
+type Aralik = readonly [number, number];
+function cizelge<T extends string>(sira: [T, number][]): Record<T, Aralik> {
+  let t = 0;
+  const z = {} as Record<T, Aralik>;
+  for (const [ad, sure] of sira) { z[ad] = [t, t + sure] as const; t += sure; }
+  return z;
+}
+const Z = cizelge([
+  ['yuru', 82], ['n1', 8], ['don1', 6], ['giris', GIRIS_SURE], ['n2', 8], ['don2', 6],
+  ['otur', 36], ['n3', 8],
+  ['dus', 78], // el çeneye 12 karede gelir, poz 2+ sn kalır; atkı ucu yavaşça daire çizer
+  ['fikir', FIKIR_SURE], // ampul, 0,5 sn duraksama, parmak
+  ['fikirTut', 15], ['kalk', 30], ['n4', 6],
+  ['adim', ADIM_SURE], // sandalyeden bir adım uzaklaş
+  ['n5', 6], ['don3', 4], // yan → 3/4 (izleyiciye dönük)
+  ['zipla1', ZIPLA_SURE], ['ara', 4], ['zipla2', ZIPLA_SURE],
+  ['n6', 6], ['don4', 4], // 3/4 → önden
+  ['onay', ONAY_SURE],
+]); // toplam 530; kalan kareler: bekleme (nefes, göz kırpma, yaylanma)
 
 const DUYGULAR: { kare: number; duygu: Duygu }[] = [
   { kare: 0, duygu: 'mutlu' },
-  { kare: 224, duygu: 'dusunceli' },
-  { kare: 300, duygu: 'sasirmis' },
-  { kare: 316, duygu: 'heyecanli' },
-  { kare: 496, duygu: 'mutlu' },
+  { kare: Z.dus[0] + 2, duygu: 'dusunceli' },
+  { kare: Z.fikir[0], duygu: 'sasirmis' },
+  { kare: Z.fikir[0] + 16, duygu: 'heyecanli' },
+  { kare: Z.don4[0] - 2, duygu: 'mutlu' },
 ];
 
 export interface SahneKaresi {
@@ -68,7 +74,6 @@ export interface SahneKaresi {
   sandalye: boolean;
 }
 
-const icinde = (k: number, [a, b]: readonly [number, number]) => k >= a && k < b;
 
 /** Dönüş: görünüş sırası (2'şer kare), ayna değişimi 3/4'te. */
 function donus(k: number, [a]: readonly [number, number], sira: [Poz['gorunus'], boolean][]): { g: Poz['gorunus']; ayna: boolean } {
@@ -135,27 +140,37 @@ export function sahneKaresi(k: number): SahneKaresi {
     z.poz = pozKaristir(fikirSon, kalk(p), yumusak(aralik(k, Z.kalk[0], Z.kalk[0] + 9)));
     const s = 1 - aralik(k, Z.kalk[0], Z.kalk[0] + 8); // ampul söner
     z.fikir = s > 0; z.parlama = s;
-  } else if (k < Z.don3[0]) {
+  } else if (k < Z.adim[0]) {
     z.ayna = true; z.poz = AYAKTA.yan;
+  } else if (k < Z.adim[1]) {
+    // sandalyeden uzaklaş (sola bakıyor: yerel ileri = dünyada sola)
+    z.ayna = true;
+    const a = adim(k - Z.adim[0], ADIM_MESAFE);
+    z.x = XS - a.kalcaX; z.poz = a.poz;
+  } else if (k < Z.don3[0]) {
+    z.ayna = true; z.x = XJ; z.poz = AYAKTA.yan;
   } else if (k < Z.don3[1]) {
+    z.x = XJ;
     const d = donus(k, Z.don3, [['yan', true], ['ucdort', true]]);
     z.poz = AYAKTA[d.g]; z.ayna = d.ayna;
   } else if (k < Z.don4[0]) {
-    z.ayna = true;
+    z.ayna = true; z.x = XJ;
     const ilk = k < Z.zipla1[1];
     const bas = ilk ? Z.zipla1[0] : Z.zipla2[0];
     const kk = Math.min(ZIPLA_SURE - 1, Math.max(0, k - bas));
     const j = zipla(kk, 'ucdort');
     Object.assign(z, { poz: j.poz, havada: j.havada, ezilme: j.ezilme, atkiHavada: j.atkiHavada });
   } else if (k < Z.don4[1]) {
+    z.x = XJ;
     const d = donus(k, Z.don4, [['ucdort', true], ['on', false]]);
     z.poz = AYAKTA[d.g]; z.ayna = d.ayna;
   } else {
+    z.x = XJ;
     z.poz = AYAKTA.on;
     z.bas = onay(k - Z.onay[0]);
   }
   // idle: nefes (yürüme/zıplama dışında), sonda ayakları üzerinde hafif yaylanma
-  const hareketli = k < Z.yuru[1] || (k >= Z.zipla1[0] && k < Z.zipla2[1]);
+  const hareketli = k < Z.yuru[1] || (k >= Z.adim[0] && k < Z.adim[1]) || (k >= Z.zipla1[0] && k < Z.zipla2[1]);
   if (!hareketli) z.poz = { ...z.poz, kok: { ...z.poz.kok, y: z.poz.kok.y + nefes(k) } };
   if (k >= Z.onay[1]) z.poz = ayaktaCok(z.poz, yaylanma(k));
   return z;

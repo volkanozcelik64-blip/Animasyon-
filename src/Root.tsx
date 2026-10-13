@@ -1,8 +1,10 @@
 import React from 'react';
 import { AbsoluteFill, Composition, useCurrentFrame } from 'remotion';
-import { Sahne, GENISLIK, YUKSEKLIK, FPS, SURE } from './sahneler/NodTest';
+import { Sahne, GENISLIK, YUKSEKLIK, FPS, SURE } from './sahneler/NodTemel';
 
-const NodTest: React.FC = () => {
+/** nod-temel: onaylanmış temel sahne. Yeni videolar src/karakter (Nod, hareketler) ve bu sahnenin
+ *  yapısı (saf kare fonksiyonu + zaman çizelgesi) üzerine kurulur. */
+const NodTemel: React.FC = () => {
   const kare = useCurrentFrame();
   return (
     <AbsoluteFill style={{ backgroundColor: '#ffffff' }}>
@@ -12,5 +14,5 @@ const NodTest: React.FC = () => {
 };
 
 export const Root: React.FC = () => (
-  <Composition id="NodTest" component={NodTest} durationInFrames={SURE} fps={FPS} width={GENISLIK} height={YUKSEKLIK} />
+  <Composition id="NodTemel" component={NodTemel} durationInFrames={SURE} fps={FPS} width={GENISLIK} height={YUKSEKLIK} />
 );

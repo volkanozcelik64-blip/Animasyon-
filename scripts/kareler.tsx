@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { chromium } from 'playwright-core';
 import fs from 'node:fs';
 import path from 'node:path';
-import { Sahne, GENISLIK, YUKSEKLIK } from '../src/sahneler/NodTest';
+import { Sahne, GENISLIK, YUKSEKLIK } from '../src/sahneler/NodTemel';
 
 const KOK = path.resolve(__dirname, '..');
 const kareler = (process.argv[2] ?? '10,30,50,80,92,104,122,140,170,186,197,222,252,264,284,296,305,316,327,337,346,359')

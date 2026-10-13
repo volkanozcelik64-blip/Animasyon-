@@ -4,6 +4,10 @@
 - Referans: `assets/karakter-referans.png`. Tek kaynak `src/karakter/` (`Nod.tsx`, ölçü/renk `olculer.ts`); eşyalar `src/esyalar/`.
 - Eski karakter ve eski çizim kodu (Blender modeli, `*.html` videolar) KULLANILMAZ.
 - Önizleme PNG'leri: `npm run onizleme` → `onizleme/karakter/`. Her değişiklikten sonra PNG'leri açıp referansla karşılaştır.
+- **nod-temel** (onaylı temel; git etiketi `nod-temel`): `src/sahneler/NodTemel.tsx` + `video/nod-temel.mp4` (18 sn, 1920×1080, 30 fps).
+  Yeni videolar bunun üzerine kurulur: Nod bileşeni, `src/karakter/hareketler.ts` (yürü, adım, otur/kalk, zıpla, giris, fikir, onay, idle)
+  ve sahne yapısı (saf `sahneKaresi(kare)` + sıralı zaman çizelgesi). Render: `npm run render:temel`.
+- Render'dan önce kritik kareleri `npm run kareler -- <kare,kare,...> <çıktı.png> [x,y,w,h]` ile çıkarıp kontrol et.
 
 ## Pipeline (current): Mixamo + Blender, flat 2D cartoon look
 - Blender runs headless only: `blender -b -P script.py [-- args]` (Ubuntu package, Blender 4.0.2; EEVEE renders via Mesa software EGL).

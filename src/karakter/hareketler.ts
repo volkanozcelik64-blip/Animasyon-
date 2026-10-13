@@ -92,6 +92,40 @@ export function yuru(faz: number, son?: number): { kalcaX: number; poz: Poz } {
   return { kalcaX: kx, poz };
 }
 
+// ---------------------------------------------------------------- tek adım (yandan): duruştan duruşa
+export const ADIM_SURE = 22;
+
+/**
+ * Bulunduğu yerden `mesafe` kadar ileri (yerel +x) sekerek bir adım: önce yakın ayak, sonra uzak ayak
+ * öne gelir; basan ayak kaymaz, kalça iki ayağın ortasında kalır, her ayak kalkışında hafif sekme.
+ * Dönüş: kalçanın aldığı yol ve poz (yan görünüş).
+ */
+export function adim(k: number, mesafe: number): { kalcaX: number; poz: Poz } {
+  const A = GORUNUS.yan;
+  const ayak = (bas: number, son: number) => {
+    const t = aralik(k, bas, son);
+    return { x: mesafe * yumusak(t), y: BILEK_Y - Math.sin(Math.PI * t) * YURU.kaldirma };
+  };
+  const a = ayak(0, 12); // yakın (sağ) ayak önce
+  const b = ayak(9, ADIM_SURE); // sonra uzak (sol) ayak
+  const kx = (a.x + b.x) / 2;
+  const sekme = 8 * (Math.sin(Math.PI * aralik(k, 0, 12)) + Math.sin(Math.PI * aralik(k, 9, ADIM_SURE))) / 2;
+  const ky = KALCA_Y + 5 - sekme;
+  const sag = bacakIK({ x: A.kalcaX.sag, y: ky }, { x: A.kalcaX.sag + a.x - kx, y: a.y });
+  const sol = bacakIK({ x: A.kalcaX.sol, y: ky }, { x: A.kalcaX.sol + b.x - kx, y: b.y });
+  const sal = 26 * Math.sin(Math.PI * aralik(k, 0, ADIM_SURE) * 2);
+  const poz: Poz = {
+    ...AYAKTA.yan,
+    kok: { x: 0, y: ky },
+    egim: 5 * Math.sin(Math.PI * aralik(k, 0, ADIM_SURE)),
+    sagKol: { omuz: sal, dirsek: -20, bilek: 0, el: 'acik' },
+    solKol: { omuz: -sal, dirsek: -20, bilek: 0, el: 'acik' },
+    sagBacak: { ...sag, ayak: 0 },
+    solBacak: { ...sol, ayak: 0 },
+  };
+  return { kalcaX: kx, poz };
+}
+
 // ---------------------------------------------------------------- oturma / kalkma (§7, yandan)
 /** Oturmuş Nod'un kalçası, ayak bileklerinin ne kadar gerisinde (ayaklar yerde, baldır 8° önde). */
 export const OTURMA_ILERI = OLCU.ustBacak + OLCU.altBacak * Math.sin((8 * Math.PI) / 180);
