@@ -40,3 +40,58 @@ Akış: Nod yürüyerek gelir ve konuşur ("Hey there!" → "Today I'm going to 
 python3 tools/build-video.py tools/video.tpl.html   # index.html'deki Nod çizimini alıp video.html'i üretir
 NODE_PATH=$(npm root -g) node tools/render-video.js $PWD/video.html $PWD/video/nod-ile-matematik.mp4
 ```
+
+## Video 2: Sayıların Sihri (`video2.html`)
+
+Yatay (16:9) ~90 saniyelik, konuşmasız kısa film. Beyaz zemin, koyu rakamlar, kırmızı vurgular; kahraman kırmızı atkılı çöp adam.
+Hazır video: [`video/sayilarin-sihri.mp4`](video/sayilarin-sihri.mp4) (1920×1080, 30 fps, sesli). `video2.html?v=1` dikey (9:16) sürümü açar.
+
+Akış: gökten düşen Nod → `9 × 7 = 63`, 63'ün üstünde tepinince `6 + 3 = 9` → hızlanan turlar (`9 × 8`, `9 × 123`, `9 × 4567`, hep 9) →
+`142857` düşer, rakamlar çarka dönüşür, Nod hamster tekerleği gibi koşarken `×2 … ×6` hep aynı rakamlar → `×7` çarpar: `999999` →
+dokuz tane `1`, `111111111²` → Nod `12345678987654321` piramidine tırmanır → `0,9`'un peşinde sonsuz dokuzlar, sonunda `0,999… = 1` →
+kâğıt katlama `2⁰ … 2⁴²`, gökyüzü ve uzay, Nod Ay'a çarpar (≈ 439.805 km) → geri düşüp `1`'in üstüne konar, göz kırpar, havai fişekler.
+
+Efektler: darbede donma, RGB ayrışması, darbe çizgileri, flaş ve renk ters çevirme, sinema şeritleri, hız çizgileri, hareket bulanıklığı, rakam izleri, parçalanan rakamlar, film greni.
+
+```bash
+NODE_PATH=$(npm root -g) node tools/render-video.js $PWD/video2.html $PWD/video/sayilarin-sihri.mp4      # yatay 1920×1080 (dikey için sona 1 ekle)
+```
+
+## Video 3: Nod vs Numbers (`nod-shorts.html`)
+
+30 saniyelik dikey (9:16) YouTube Shorts animasyonu, 1080×1920, 24 fps, konuşmasız. Saf siyah zemin; nane yeşili (#3EE0A8) yüzsüz, yuvarlak kare kafalı, tek antenli Nod
+duygularını yalnızca anteni ve duruşuyla gösterir. Rakamlar ve semboller beyaz, sade sans-serif çizgilerdir ve ağır fiziksel nesneler gibi davranır.
+Hazır video: [`video/nod-shorts.mp4`](video/nod-shorts.mp4).
+
+Akış: `1` kafasına düşer → ikinci `1` bovling topu gibi yuvarlanır, iki `1` öfkeyle saldırır → Nod `+`'yı aralarına bırakır: `1 + 1 = 2` (anten parlar) →
+`+` kalkan olur, koşan `3` çarpar: `2 + 3 = 5` → koca `5` bayrağını çekiç gibi savurur, Nod eğilir, `+`'yı 45° çevirip `×` yapar ve shuriken gibi fırlatır: `5 × 2 = 10` →
+`10` devleşir, `0` kopup tekerlek gibi kovalar, Nod `−` ve iki noktayı `÷` yapar, ayakta duran `5`'in önüne diker: `10 ÷ 5 = 2` →
+dev `2` küçülüp Nod'un eline düşer, karate darbesiyle iki `1`'e bölünür, `÷` kesir çizgisine döner: `½` → Nod tek ayak üstünde döner, anten parlar, siyah.
+
+Ses: çizgi film darbeleri, her sembolde yumuşak "tik", sayılar büyürken derin "bum", anten parlarken "ding", hafif synth ritmi (hepsi Web Audio ile sentezlenir).
+Her kare zamanın saf fonksiyonudur (`draw(t)`), bu yüzden render kare kare deterministiktir.
+
+```bash
+NODE_PATH=$(npm root -g) node tools/render-shorts.js nod-shorts.html video/nod-shorts.mp4
+NODE_PATH=$(npm root -g) node tools/render-shorts.js nod-shorts.html kareler --stills 1,9.9,23.6   # tek tek PNG kareler
+```
+
+## Video 4: Nod — SIUUU! (`nod-siuuu.html`)
+
+30-second vertical (9:16) cartoon, 1080×1920, 30 fps, with sound. Hand-drawn style on cream notebook paper (blue lines, red margin), thick black outlines, soft grey shading; speech appears only in white bubbles.
+Ready video: [`video/nod-siuuu.mp4`](video/nod-siuuu.mp4).
+
+Story: Nod sprawled in the armchair (chips on his right, cola on his left) → GOAL on TV → chips explode, he launches out and sprints across the rug →
+jump, 180° spin, "SIUUU!" landing (paper lines shake) → his arm swings back, the blue vase wobbles in slow motion and shatters → "Oh no!" + thought cloud of Mom's flying slipper →
+frantic repair montage (collecting shards, ripping tape with his teeth, wrap-wrap-wrap, crooked vase stands) → one finger, let go… it holds → tiny "siu…" →
+door bursts open, Mom spots the vase: red face, steam, bun pops → "NOOOD!", slipper flies at the camera, Nod dives behind the armchair, Dad covers his eyes → smash cut to black.
+
+Effects: hit-stop freezes with shudder on impacts, motion blur on fast moves (launch, jump-spin, scramble, tape wrap, slipper throw), inverted impact frames, comic starbursts, manga focus lines, slow-motion desaturation during the vase wobble, red rage vignette, sparkles, flickering paper grain, line boil, camera shake.
+Preview stills: [`onizleme/`](onizleme/).
+
+Sound (all synthesized with Web Audio): TV crowd roar, whoosh, formant-synth "SIUUU" shout, glass shatter, tape rips and squeaks, whispered "siu", door bang, Mom's "NOOOD!", kettle steam, slipper whoosh.
+
+```bash
+NODE_PATH=$(npm root -g) node tools/render-shorts.js nod-siuuu.html video/nod-siuuu.mp4
+NODE_PATH=$(npm root -g) node tools/render-shorts.js nod-siuuu.html frames --stills 3.2,9.9,13.6   # single PNG frames
+```
