@@ -24,7 +24,7 @@ for name, ang in [('front', 0), ('threequarter', -35), ('side', -90)]:
     loc = (r * math.sin(a), -r * math.cos(a), 1.0)
     for o in list(scene.objects):
         if o.type == 'CAMERA' or o.name.startswith('Paper'): bpy.data.objects.remove(o)
-    cam = toon.ortho_camera(scene, loc, (0, 0, 1.0), 3.8)
+    cam = toon.ortho_camera(scene, loc, (0, 0, 0.95), 3.4)
     paper, col = toon.paper_backdrop(scene, cam, dist=10)
     toon.exclude_from_lines(ls, col)
     scene.render.filepath = os.path.join(out, f'nod3d_{name}.png')
