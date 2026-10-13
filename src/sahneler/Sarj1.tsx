@@ -13,7 +13,7 @@ import type { AtkiDurumAdi } from '../karakter/atkiTepki';
 import { otur, kolHedef, elKonumu, kafaKonumu, gozKirp, aralik, yumusak, sinirla } from '../karakter/hareketler';
 import { bilekNerede, type V } from '../karakter/ik';
 import { Balon } from '../karakter/Balon';
-import { ModernTelefon, TELEFON } from '../esyalar/ModernTelefon';
+import { TelefonluEller, ONDEN, OMUZ_ARKASI, bilekYerel, telefonYeri, yereldenDunyaya } from '../karakter/TelefonTutus';
 import { ODA, Oda } from './pil/Oda';
 
 export const GENISLIK = 1920;
@@ -35,32 +35,34 @@ const GECIS = 6;
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
 // ---------------------------------------------------------------- telefonu iki elle tutan oturuş
-const OMUZ = OLCU.omuzY - OLCU.kalcaY;
 const A_UC = GORUNUS.ucdort;
-/** Telefon dünyada (telefon birimi → Nod birimi): boy 120, en ~55 (9:19,5). */
-export const TEL_OLCEK = 120 / TELEFON.yuk;
-const TEL_YARI = (TELEFON.gen / 2) * TEL_OLCEK;
-const AVUC_R = 11.5 * OLCU.elOlcek; // yumruk avucu
-/** Kalçaya göre telefon merkezi: göğüs önünde, çenenin altında. */
-const TEL_MERKEZ: V = { x: 30, y: OMUZ + 34 };
+/** Kalçaya göre telefon merkezi (önden): karın önünde, göğüs hizasının altında; atkıyı ve yüzü kapatmaz. */
+const TEL_MERKEZ: V = { x: 26, y: -40 };
 
-/** Avuçlar telefonun iki kenarını alt yarıdan kavrar; kollar aşağıdan gelir. */
-function tutanPoz(titre = 0, yukari = 0): Poz {
+/** Bilekler telefonun yanlarında (kollar gövdenin yanından, dirsekler bükülü); telefon bileklere bağlı. */
+function tutanPoz(titre: V = { x: 0, y: 0 }, yukari = 0): Poz {
   const p = otur(1, 'ucdort');
-  const c = { x: TEL_MERKEZ.x, y: TEL_MERKEZ.y - yukari + titre };
-  const avucSag = { x: c.x + TEL_YARI + 8, y: c.y + 26 };
-  const avucSol = { x: c.x - TEL_YARI - 8, y: c.y + 26 };
+  const c = { x: TEL_MERKEZ.x + titre.x, y: TEL_MERKEZ.y - yukari + titre.y };
+  const bSol = yereldenDunyaya(c, 0, bilekYerel(-1, ONDEN));
+  const bSag = yereldenDunyaya(c, 0, bilekYerel(1, ONDEN));
   return {
     ...p, egim: 2, kafaEgim: 8,
-    // uzak kol (sol omuz, önde) telefonun sağ kenarını, yakın kol (sağ omuz) sol kenarını tutar
-    solKol: kolHedef(A_UC.omuzX.sol, bilekNerede(avucSag, 165, 14), 165, 'yumruk'),
-    sagKol: kolHedef(A_UC.omuzX.sag, bilekNerede(avucSol, -165, 14), -165, 'yumruk', true),
+    // uzak kol (sol omuz) telefonun sağ kenarını, yakın kol (sağ omuz) sol kenarını tutar
+    solKol: kolHedef(A_UC.omuzX.sol, bSag, -90, 'acik'),
+    sagKol: kolHedef(A_UC.omuzX.sag, bSol, 90, 'acik', true),
   };
+}
+
+/** Dünyadaki iki bilekten telefonun yeri + ön kol açıları (eldiven bileklikleri için). */
+function telefonVeKollar(poz: Poz, yer: (p: V) => V) {
+  const bSol = yer(elKonumu(poz, 'sag').bilek), bSag = yer(elKonumu(poz, 'sol').bilek);
+  const onKol = (kol: Poz['sagKol']) => kol.omuz + kol.dirsek + poz.egim + 90;
+  return { ...telefonYeri(bSol, bSag, ONDEN), onKolSol: onKol(poz.sagKol), onKolSag: onKol(poz.solKol) };
 }
 
 interface NodDurumu {
   poz: Poz; duygu: Duygu; onceki?: Duygu; gecis: number; bak: Bakis; bas: number; agiz: Agiz; kirp: number;
-  atkiDurum?: AtkiDurumAdi; zipla: number; titre: number;
+  atkiDurum?: AtkiDurumAdi; zipla: number; titre: V;
 }
 
 /** Gülme: kısa hızlı sarsıntılar (ağız açılıp kapanır, omuzlar titrer). */
@@ -74,13 +76,13 @@ export function nodDurumu(k: number): NodDurumu {
   const gl = gulme(k);
   const n: NodDurumu = {
     poz: tutanPoz(), duygu: 'mutlu', gecis: 1, bak: 'asagi', bas: 0, agiz: 'kapali', kirp: gozKirp(k, 'sarj1'),
-    zipla: 0, titre: 0,
+    zipla: 0, titre: { x: 0, y: 0 },
   };
   if (k < Z.don) {
     n.bas = 0.18 * gl.v;
     n.zipla = 4 * gl.v;
     n.agiz = gl.g > 0.3 ? (Math.floor(k / 3) % 2 === 0 ? 'A' : 'E') : 'kapali';
-    n.poz = tutanPoz(0, 4 * gl.v);
+    n.poz = tutanPoz({ x: 0, y: 0 }, 4 * gl.v);
     if (k >= Z.gulmeBiter) { n.duygu = 'notr'; n.onceki = 'mutlu'; n.gecis = sinirla((k - Z.gulmeBiter) / 8); }
   } else if (k < Z.sok) {
     // donar: nefes yok, gülüş silinir, gözler telefona kilitli
@@ -92,7 +94,9 @@ export function nodDurumu(k: number): NodDurumu {
     n.zipla = Math.sin(Math.PI * sinirla(t / 8)) * 16;
     n.atkiDurum = 'fikir';
     n.bak = 'izleyici';
-    n.titre = t > 8 ? Math.sin(k * 2.3) * 1.4 : 0;
+    // eller hafifçe titrer; telefon bileklere bağlı olduğu için onunla titrer
+    const tt = t > 6 ? 1 : 0;
+    n.titre = { x: tt * 2.4 * Math.sin(k * 2.3), y: tt * 1.8 * Math.cos(k * 3.1) };
     n.poz = tutanPoz(n.titre, 0);
     // balon yazılırken ağız sessizce açılıp kapanır
     if (k >= Z.balon) n.agiz = Math.floor(k / 4) % 2 === 0 ? 'O' : 'A';
@@ -105,14 +109,15 @@ interface Kamera { x: number; y: number; zoom: number }
 const NOD_X = ODA.oturX;
 
 function kamera(k: number): Kamera {
-  const genis: Kamera = { x: 120, y: -400, zoom: 1.0 };
-  const yakin: Kamera = { x: NOD_X + 20, y: -330, zoom: 1.55 };
+  // geniş plan: oturan Nod ekran yüksekliğinin ~%50'si
+  const genis: Kamera = { x: NOD_X + 120, y: -250, zoom: 1.2 };
+  const yakin: Kamera = { x: NOD_X + 40, y: -250, zoom: 1.7 };
   if (k < Z.on) {
     const t = yumusak(aralik(k, Z.itme, Z.gecis1 + GECIS));
     return { x: lerp(genis.x, yakin.x, t), y: lerp(genis.y, yakin.y, t), zoom: Math.exp(lerp(Math.log(genis.zoom), Math.log(yakin.zoom), t)) };
   }
   // önden yüz: yarım yakın plan (kafa + telefonu tutan eller)
-  return { x: NOD_X + 90, y: -330, zoom: 1.95 };
+  return { x: NOD_X + 110, y: -270, zoom: 1.95 };
 }
 
 function sarsinti(k: number): V {
@@ -122,38 +127,13 @@ function sarsinti(k: number): V {
   return { x: (random(`s1x${k}`) - 0.5) * 2 * g, y: (random(`s1y${k}`) - 0.5) * 2 * g };
 }
 
-/** Elde tutulan telefon (dünya): sırtı görünür; parmaklar sırtın kenarlarını sarar. */
-const TutulanTelefon: React.FC<{ avucSag: V; avucSol: V; kare: number }> = ({ avucSag, avucSol }) => {
-  const c = { x: (avucSag.x + avucSol.x) / 2, y: (avucSag.y + avucSol.y) / 2 - 26 };
-  const acı = (Math.atan2(avucSag.y - avucSol.y, avucSag.x - avucSol.x) * 180) / Math.PI;
-  const w = 6.5 * OLCU.elOlcek; // parmak kalınlığı
-  const o = CIZGI.eldiven * OLCU.elOlcek;
-  // kenardan içeri kıvrılan üç parmak (her iki yanda)
-  const parmak = (taraf: 1 | -1, dy: number, uz: number) => {
-    const x1 = taraf * (TEL_YARI + 4), x2 = taraf * (TEL_YARI - uz);
-    return (
-      <g key={`${taraf}${dy}`}>
-        <line x1={x1} y1={dy} x2={x2} y2={dy - 2} stroke={RENK.murekkep} strokeWidth={w + 2 * o} strokeLinecap="round" />
-        <line x1={x1} y1={dy} x2={x2} y2={dy - 2} stroke={RENK.beyaz} strokeWidth={w} strokeLinecap="round" />
-      </g>
-    );
-  };
-  return (
-    <g transform={`translate(${c.x} ${c.y}) rotate(${acı})`}>
-      <g transform={`scale(${TEL_OLCEK * 0.9} ${TEL_OLCEK})`}><ModernTelefon yuz="sirt" id="s1sirt" /></g>
-      {([1, -1] as const).map((t) => [parmak(t, 10, 9), parmak(t, 22, 11), parmak(t, 34, 9)])}
-    </g>
-  );
-};
-
 /** Oda + Nod (dünya). */
 const DunyaCekimi: React.FC<{ k: number; kam: Kamera; sars: V }> = ({ k, kam, sars }) => {
   const n = nodDurumu(k);
   const olc = kam.zoom * S;
   const g = `translate(${GENISLIK / 2 + sars.x} ${YUKSEKLIK / 2 + sars.y}) scale(${olc}) translate(${-kam.x} ${-kam.y})`;
   const yer = (p: V): V => ({ x: NOD_X + p.x, y: p.y - n.zipla });
-  const avucSag = yer(elKonumu(n.poz, 'sol').avuc); // uzak kol telefonun sağ kenarında
-  const avucSol = yer(elKonumu(n.poz, 'sag').avuc);
+  const tel = telefonVeKollar(n.poz, yer);
   const kafa = kafaKonumu(n.poz);
   const ekran = (p: V): V => ({ x: GENISLIK / 2 + (p.x - kam.x) * olc + sars.x, y: YUKSEKLIK / 2 + (p.y - kam.y) * olc + sars.y });
   const agizE = ekran(yer(kafa.agiz));
@@ -166,8 +146,11 @@ const DunyaCekimi: React.FC<{ k: number; kam: Kamera; sars: V }> = ({ k, kam, sa
         <ellipse cx={NOD_X + 40} cy={2} rx={70} ry={8} fill={RENK.golge} />
         <Nod id="s1" x={NOD_X} y={-n.zipla} olcek={1} poz={n.poz} duygu={n.duygu} oncekiDuygu={n.onceki} gecis={n.gecis}
           kare={k} bak={n.bak} bas={n.bas} agiz={n.agiz} kirp={n.kirp} atkiDurum={n.atkiDurum} golge={false}
-          sagNesne={<g />} solNesne={<g />} />
-        <TutulanTelefon avucSag={avucSag} avucSol={avucSol} kare={k} />
+          elleriGizle />
+        {/* telefon bileklere bağlı: eller → telefon → parmaklar */}
+        <g transform={`translate(${tel.x} ${tel.y}) rotate(${tel.aci})`}>
+          <TelefonluEller yuz="sirt" kavrayis={ONDEN} aci={tel.aci} onKolSol={tel.onKolSol} onKolSag={tel.onKolSag} id="s1sirt" />
+        </g>
       </g>
       {k >= Z.balon && (
         <Balon tip="bagirma" metin="WAIT... 1%?! NO NO NO!" x={kafaE.x + 560} y={kafaE.y - 170} hedef={agizE}
@@ -177,86 +160,82 @@ const DunyaCekimi: React.FC<{ k: number; kam: Kamera; sars: V }> = ({ k, kam, sa
   );
 };
 
-// ---------------------------------------------------------------- omuz üstü çekim (ekran uzayında kurulur)
-/** Telefonu tutan eldivenler, telefon biriminde (ekran tarafından görünüş): avuçlar arkada, başparmaklar ekranda. */
-const OTS = { telX: 1180, telY: 520, olcek: 4.3, kafa: { x: 250, y: 650 }, nodOlcek: 4.0 } as const;
-// yakın çekimde eldivenler telefona göre bir miktar küçültülür (perspektif: telefon kameraya daha yakın)
-const EL_OTS = 0.62;
-const BIRIM = (OLCU.elOlcek / TEL_OLCEK) * EL_OTS; // eldiven ölçüsü (telefon biriminde)
-
-function eldivenler(katman: 'arka' | 'on') {
-  const r = (AVUC_R / TEL_OLCEK) * EL_OTS;
-  const o = CIZGI.eldiven * BIRIM;
-  const w = 6.5 * BIRIM;
-  const K = RENK.murekkep, B = RENK.beyaz;
-  return ([1, -1] as const).map((t) => {
-    const avuc = { x: t * (TELEFON.gen / 2 + 7), y: 66 };
-    const bilek = { x: avuc.x + t * 9, y: avuc.y + 14 * BIRIM };
-    if (katman === 'arka') {
-      // kollar ön plandaki gövdeden (sol alt) gelir
-      const dirsek = t < 0 ? { x: -190, y: 175 } : { x: -40, y: 185 };
-      return (
-        <g key={t}>
-          {/* kol: aşağıdan (Nod'un gövdesinden) gelir */}
-          <line x1={dirsek.x} y1={dirsek.y} x2={bilek.x} y2={bilek.y} stroke={K} strokeWidth={OLCU.kolKalinlik / TEL_OLCEK} strokeLinecap="round" />
-          <circle cx={avuc.x} cy={avuc.y} r={r + o} fill={K} />
-          <circle cx={avuc.x} cy={avuc.y} r={r} fill={B} />
-          {/* bileklik */}
-          <g transform={`translate(${bilek.x} ${bilek.y}) rotate(${t * -16}) scale(${BIRIM})`}>
-            <rect x="-10" y="-5" width="20" height="10" rx="3" fill={RENK.bileklik} stroke={K} strokeWidth={CIZGI.bileklik} />
-            <path d="M-7.5 -2.5H7.5" stroke="#8cc4f2" strokeWidth="1.6" strokeLinecap="round" />
-          </g>
-        </g>
-      );
-    }
-    // ekran tarafından yalnız başparmaklar görünür: alt köşelerde ekranın kenarına biner
-    const bp1 = { x: t * (TELEFON.gen / 2 + 4), y: 64 }, bp2 = { x: t * (TELEFON.gen / 2 - 5), y: 54 };
-    return (
-      <g key={t}>
-        <line x1={bp1.x} y1={bp1.y} x2={bp2.x} y2={bp2.y} stroke={K} strokeWidth={w + 2 * o} strokeLinecap="round" />
-        <line x1={bp1.x} y1={bp1.y} x2={bp2.x} y2={bp2.y} stroke={B} strokeWidth={w} strokeLinecap="round" />
-      </g>
-    );
-  });
-}
+// ---------------------------------------------------------------- omuz arkası çekim (ekran uzayında kurulur)
+// Sol altta Nod'un kafasının arkası + atkısı (kadrajın ~%35'i, hafif bulanık); kollar omuzlardan çıkıp
+// telefona uzanır (sol kol kafanın altından, sağ kol sağ alttan); telefon sağ-ortada, Nod'a doğru ~7° eğik.
+const OTS = {
+  tel: { x: 1200, y: 440 }, telOlcek: 6.0, telAci: -7,
+  kafa: { x: 280, y: 440 }, nodOlcek: 4.0,
+} as const;
 
 const OmuzUstu: React.FC<{ k: number }> = ({ k }) => {
   const gl = gulme(k);
   // gülerken eller/telefon ve omuzlar farklı fazda titrer
-  const telDy = 7 * gl.v + 1.5 * Math.sin(k * 0.21);
-  const telDx = 2 * Math.sin(k * 1.7) * gl.g;
+  const telD = { x: 2 * Math.sin(k * 1.7) * gl.g, y: 7 * gl.v + 1.5 * Math.sin(k * 0.21) };
   const nodDy = 10 * Math.abs(Math.sin(k * 0.95 + 0.5)) * gl.g;
   // uyarı: hafif itme (zoom), bildirim yayla iner
   const uyT = k - Z.uyari;
   const uyari = uyT < 0 ? 0 : Math.min(1, 1 - Math.pow(1 - sinirla(uyT / 7), 3));
   const itme = 1 + 0.07 * yumusak(aralik(k, Z.uyari, Z.uyari + 20));
   const n = nodDurumu(k);
+
+  // telefon (ekran uzayı): merkez, açı, ölçek; bilekler telefona bağlı
+  const tc = { x: OTS.tel.x + telD.x, y: OTS.tel.y + telD.y };
+  const P = OTS.telOlcek;
+  const bilek = (t: 1 | -1) => { const b = bilekYerel(t, OMUZ_ARKASI); return yereldenDunyaya(tc, OTS.telAci, { x: b.x * P, y: b.y * P }); };
+  const bSol = bilek(-1), bSag = bilek(1);
+
+  // omuzlar (arka görünüş: Nod'un solu ekranın solunda)
+  const N = OTS.nodOlcek;
+  const H = { x: OTS.kafa.x, y: OTS.kafa.y + nodDy };
+  const omuzY = H.y + (OLCU.omuzY - OLCU.kafaY) * N;
+  const omuzSol = { x: H.x + GORUNUS.arka.omuzX.sol * N, y: omuzY };
+  const omuzSag = { x: H.x + GORUNUS.arka.omuzX.sag * N, y: omuzY };
+  // üst kol: omuzdan bileğe doğru, dirsek aşağı bükülü (iki kemik, ekran uzayında)
+  const ustL = OLCU.ustKol * N * 1.15;
+  const dirsek = (o: V, b: V, buk: number) => {
+    const a = Math.atan2(b.y - o.y, b.x - o.x) + buk;
+    return { x: o.x + Math.cos(a) * ustL, y: o.y + Math.sin(a) * ustL, a };
+  };
+  const dSol = dirsek(omuzSol, bSol, 0.3), dSag = dirsek(omuzSag, bSag, 0.8);
+  // Nod'un kendi üst kolu bu yöne döner (yonV: 0 = aşağı); ön kol üst kolun altına katlanır (görünmez)
+  const kolAci = (d: { a: number }) => (Math.atan2(-Math.cos(d.a), Math.sin(d.a)) * 180) / Math.PI;
+  const arkaPoz: Poz = {
+    ...AYAKTA.arka,
+    solKol: { omuz: kolAci(dSol), dirsek: 180, bilek: 0, el: 'acik' },
+    sagKol: { omuz: kolAci(dSag), dirsek: 180, bilek: 0, el: 'acik' },
+  };
+  const onKol = (d: V, b: V) => (Math.atan2(b.y - d.y, b.x - d.x) * 180) / Math.PI;
+  const kalin = OLCU.kolKalinlik * N;
+
   return (
     <g>
       <defs>
-        <filter id="s1bulanik" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="7" /></filter>
+        <filter id="s1bulanik" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="6" /></filter>
         <filter id="s1bulanik2" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="12" /></filter>
       </defs>
       <g transform={`translate(${GENISLIK / 2} ${YUKSEKLIK / 2}) scale(${itme}) translate(${-GENISLIK / 2} ${-YUKSEKLIK / 2})`}>
         {/* arka plan: odanın karşı duvarı ve zemin, odak dışı */}
         <g filter="url(#s1bulanik2)">
           <rect x={-100} y={-100} width={2200} height={1400} fill="#f4f5f8" />
-          <rect x={-100} y={820} width={2200} height={400} fill="#e3e8ef" />
-          <rect x={-100} y={790} width={2200} height={30} fill="#ffffff" stroke={RENK.murekkep} strokeWidth={4} />
-          <ellipse cx={1500} cy={120} rx={420} ry={160} fill="#fff6dc" />
-          {/* dizler (kanepede oturan Nod'un bacakları) */}
-          <path d="M760 1200L900 960M1380 1200L1260 960" stroke={RENK.murekkep} strokeWidth={70} strokeLinecap="round" />
+          <rect x={-100} y={850} width={2200} height={400} fill="#e3e8ef" />
+          <rect x={-100} y={820} width={2200} height={30} fill="#ffffff" stroke={RENK.murekkep} strokeWidth={4} />
+          <ellipse cx={1600} cy={110} rx={420} ry={150} fill="#fff6dc" />
         </g>
-        {/* telefon + eller (net) */}
-        <g transform={`translate(${OTS.telX + telDx} ${OTS.telY + telDy}) rotate(-3) scale(${OTS.olcek})`}>
-          {eldivenler('arka')}
-          <ModernTelefon yuz="ekran" kare={k} pil={1} uyari={uyari} yanip={k >= Z.uyari} id="s1ekran" />
-          {eldivenler('on')}
+        {/* ön kollar: dirsekten bileğe (telefona yakın, net) */}
+        {[[dSol, bSol], [dSag, bSag]].map(([d, b], i) => (
+          <line key={i} x1={d.x} y1={d.y} x2={b.x} y2={b.y} stroke={RENK.murekkep} strokeWidth={kalin * 0.92} strokeLinecap="round" />
+        ))}
+        {/* telefon + kavrayan eller (bileklere bağlı) */}
+        <g transform={`translate(${tc.x} ${tc.y}) rotate(${OTS.telAci}) scale(${P})`}>
+          <TelefonluEller yuz="ekran" kavrayis={OMUZ_ARKASI} aci={OTS.telAci}
+            onKolSol={onKol(dSol, bSol)} onKolSag={onKol(dSag, bSag)}
+            kare={k} pil={1} uyari={uyari} yanip={k >= Z.uyari} id="s1ekran" />
         </g>
-        {/* ön plan: Nod'un kafasının arkası, atkısı ve omzu (bulanık, kenarda) */}
+        {/* ön plan: kafanın arkası, atkı, omuzlar ve üst kollar (bulanık) */}
         <g filter="url(#s1bulanik)">
-          <g transform={`translate(${OTS.kafa.x} ${OTS.kafa.y + nodDy})`}>
-            <Nod id="s1arka" x={0} y={-(OLCU.kafaY) * OTS.nodOlcek} olcek={OTS.nodOlcek} poz={AYAKTA.arka}
+          <g transform={`translate(${H.x} ${H.y})`}>
+            <Nod id="s1arka" x={0} y={-(OLCU.kafaY) * N} olcek={N} poz={arkaPoz} elleriGizle
               duygu={n.duygu} kare={k} golge={false} kaynama={false} bas={-0.1 * gl.v} />
           </g>
         </g>

@@ -70,6 +70,8 @@ export interface NodProps {
   kaynama?: boolean;
   /** pozdaki el şeklini her iki el için ezer */
   el?: ElPozu;
+  /** elleri çizme (eller sahnede ayrı çizilir, ör. telefonu kavrayan eldivenler); kollar çizilir */
+  elleriGizle?: boolean;
 }
 
 // ---------------------------------------------------------------- uzuvlar
@@ -79,9 +81,9 @@ const Tup: React.FC<{ L: number; w: number }> = ({ L, w }) => (
 
 type KolKatmani = 'tup' | 'el' | 'hepsi';
 
-function KolCiz({ kol, x, s, katman, nesne }: { kol: Kol; x: number; s: number; katman: KolKatmani; nesne?: React.ReactNode }) {
+function KolCiz({ kol, x, s, katman, nesne, elYok }: { kol: Kol; x: number; s: number; katman: KolKatmani; nesne?: React.ReactNode; elYok?: boolean }) {
   const tup = katman !== 'el';
-  const el = katman !== 'tup' && !kol.arkada; // arkadaki el gövdenin arkasında kalır, görünmez
+  const el = katman !== 'tup' && !kol.arkada && !elYok; // arkadaki el gövdenin arkasında kalır, görünmez
   return (
     <g transform={`translate(${x} ${OMUZ}) rotate(${kol.omuz})`}>
       {tup && <Tup L={OLCU.ustKol} w={OLCU.kolKalinlik} />}
@@ -199,7 +201,7 @@ export const Nod: React.FC<NodProps> = (p) => {
   const kolAl = (taraf: 'sag' | 'sol') => (taraf === 'sag' ? poz.sagKol : poz.solKol);
   const kol = (taraf: 'sag' | 'sol', katman: KolKatmani) => (
     <KolCiz key={`k${taraf}${katman}`} kol={kolAl(taraf)} x={A.omuzX[taraf]}
-      s={elS[taraf]} katman={katman} nesne={taraf === 'sag' ? p.sagNesne : p.solNesne} />
+      s={elS[taraf]} katman={katman} nesne={taraf === 'sag' ? p.sagNesne : p.solNesne} elYok={p.elleriGizle} />
   );
   const yakinlar: ('sag' | 'sol')[] = A.uzak ? [A.uzak === 'sag' ? 'sol' : 'sag'] : ['sag', 'sol'];
   // eller arkada olan kollar gövdenin arkasına
