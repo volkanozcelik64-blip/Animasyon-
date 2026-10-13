@@ -62,11 +62,12 @@ function donus(k: number, [a]: readonly [number, number], sira: [Poz['gorunus'],
   return { g: sira[i][0], ayna: sira[i][1] };
 }
 
-/** Oturan + düşünceli: yakın el çenede (yan görünüş, üst gövde yerelinde). */
+/** Oturan + düşünceli (yan görünüş, üst gövde yerelinde): avuç çenenin ön-alt konturunda kafaya değer,
+ *  bükülü işaret parmağı yanakta (öne bakan yüz tarafı), başparmak geriye, çenenin altına. */
 function cenedeKol(): Poz['sagKol'] {
   const A = GORUNUS.yan;
-  const hedef = { x: 40, y: OLCU.kafaY - OLCU.kalcaY + 52 };
-  return kolHedef(A.omuzX.sag, bilekNerede(hedef, 186, 24), 186, 'cene', true);
+  const avuc = { x: 36, y: OLCU.kafaY - OLCU.kalcaY + 69 };
+  return kolHedef(A.omuzX.sag, bilekNerede(avuc, 190, 14), 190, 'cene', false);
 }
 
 /** Bir karenin tüm durumu (atkı salınımı hariç). */

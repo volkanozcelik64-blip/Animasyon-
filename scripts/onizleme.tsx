@@ -263,6 +263,26 @@ async function main() {
   <div style="display:flex;padding:10px 20px 0">${dokuz.map((d, i) => `<div style="text-align:center">${atkiHucre(d, i, false)}<div class="etiket" style="font-size:17px">${(tepkiAd[d] ?? d).toUpperCase()}</div></div>`).join('')}</div>
   <div style="display:flex;padding:6px 20px 0">${dokuz.map((d, i) => atkiHucre(d, i, true)).join('')}</div>`, 1840, 660);
 
+  // ------------------------------------------------ DÜŞÜNCELİ EL
+  {
+    const kafaMerkez = { x: 88 * Math.sin((-6 * Math.PI) / 180), y: OLCU.boyunY - 88 * Math.cos((-6 * Math.PI) / 180) };
+    const yakinVB = `-150 ${OLCU.kafaY - 85} 280 250`;
+    await cek('dusunceli-el.png', `${stilCss}
+    <div style="padding:22px 30px 6px;font-size:32px;font-weight:bold">NOD — Düşünceli eli</div>
+    <div style="display:flex;gap:20px;padding:10px 30px;align-items:flex-end">
+      ${etiketli(boy('de0', <Nod id="de0" duygu="dusunceli" kare={20} />, 330), 'tam boy', 340)}
+      ${etiketli(svg(<svg viewBox={yakinVB} width="560" height="500">
+        <Nod id="de1" duygu="dusunceli" kare={20} golge={false} />
+        {/* kontrol: kafa konturu (kesikli) — parmak bu çizginin içinde kalmalı */}
+        <circle cx={kafaMerkez.x} cy={kafaMerkez.y} r={OLCU.kafaR} fill="none" stroke="#1e90ff" strokeWidth="1" strokeDasharray="4 3" />
+      </svg>), 'yakın — kesikli mavi: kafa konturu', 570)}
+      ${etiketli(svg(<svg viewBox="-45 -55 90 90" width="260" height="260">
+        <line x1="0" y1="0" x2="0" y2="40" stroke={RENK.murekkep} strokeWidth={OLCU.kolKalinlik / OLCU.elOlcek} strokeLinecap="round" />
+        <g transform="rotate(180)"><El poz="cene" s={-1} /></g>
+      </svg>), 'el şekli: bükülü işaret parmağı, yumruk, başparmak', 300)}
+    </div>`, 1300, 700);
+  }
+
   await tarayici.close();
 }
 

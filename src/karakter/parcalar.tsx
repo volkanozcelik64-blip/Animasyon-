@@ -90,8 +90,9 @@ function elParcalari(poz: ElPozu, s: number): Parca[] {
       ];
     case 'cene':
       return [
-        // işaret parmağı dış yanda yukarı (yanak boyunca), başparmak içe doğru yatay (çenenin altı): L biçimi
-        { t: 'k', x1: -5 * s, y1: 22, x2: -9 * s, y2: 40, w: 7, kat: 'alt' },
+        // işaret parmağı hafif bükülü (iki boğum) yanağa yaslanır; diğerleri yumruk; başparmak çenenin altında
+        { t: 'k', x1: -5 * s, y1: 22, x2: -7 * s, y2: 31, w: 7, kat: 'alt' },
+        { t: 'k', x1: -7 * s, y1: 31, x2: -2.5 * s, y2: 37, w: 6.6, kat: 'alt' },
         { t: 'c', x: 0, y: 14, r: 11.5, kat: 'birlesik' },
         { t: 'k', x1: -5, y1: 22, x2: 5, y2: 22, w: 13, kat: 'birlesik' },
         { t: 'k', x1: 8 * s, y1: 20, x2: 17 * s, y2: 24, w: 6.5, kat: 'ust' },

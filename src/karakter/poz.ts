@@ -90,12 +90,13 @@ export const ISARET_EDEN: Poz = {
 // ---------------------------------------------------------------- ek duygu pozları (§3)
 // Açılar önden bakış için hesaplandı (omuz/dirsek/bilek zinciri; uzuv boyları sabit).
 export const DUYGU_POZLARI: Partial<Record<Duygu, Poz>> = {
-  /** eli çenesinde: dirsek dışarıda bükülü, işaret parmağı yanakta, başparmak çenenin altında; kafa ele doğru ~6° yatık.
-   *  İki kemikli çözüm: omuz (-30,-124), bilek (-34,-127), dirsek (-64,-82); el 195° (yukarı-içe),
-   *  işaret parmağı ucu sol yanakta (-31,-203), başparmak ucu çenenin altında (8,-162). Uzuv boyları sabit. */
+  /** eli çenesinde: avuç çene-yanak çizgisinde kafaya değer, bükülü işaret parmağı yanakta (kafa konturunun
+   *  içinde), diğer parmaklar yumruk, başparmak çenenin altında; dirsek aşağıda bükülü; kafa ~6° yatık.
+   *  İki kemikli çözüm: omuz (-30,-124) → bilek (-50,-139), dirsek (-72,-90); el 206°;
+   *  avuç merkezi (-38,-162), parmak ucu (-26,-205) (kafa merkezine 34 birim), başparmak ucu (-2,-165). */
   dusunceli: {
     ...AYAKTA.on,
-    sagKol: { omuz: 39.5, dirsek: 175, bilek: -19.6, el: 'cene', ayna: true },
+    sagKol: { omuz: 50.3, dirsek: 153.5, bilek: 2.2, el: 'cene', ayna: true },
     kafaEgim: -6,
     atki: { a1: 0, a2: 0 },
   },
