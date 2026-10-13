@@ -133,22 +133,22 @@ const H = (dx: number, dy: number): [number, number] => [GEO.kafa.x + dx, GEO.ka
 const D = 180 / Math.PI;
 
 /**
- * 2 kemikli IK: eli (x, y) noktasına götüren [omuz, dirsek] açılarını verir.
- * dirsekDisa=true → dirsek gövdeden dışarı doğru kırılır.
+ * 2 kemikli kol IK (yerel uzay: omuz orijinde, 0° = aşağı, + açı yerel −x yönüne).
+ * secim: 'disa' dirsek yerel −x tarafında, 'ice' tersi, 'asagi' dirsek daha aşağıda olan çözüm.
  */
-export const kolIK = (taraf: 'sol' | 'sag', x: number, y: number, dirsekDisa = true): [number, number] => {
-  const o = taraf === 'sol' ? GEO.omuzSol : GEO.omuzSag;
-  const tx = taraf === 'sol' ? x - o.x : o.x - x; // yerel uzay: -x = dışarı
-  const ty = y - o.y;
+export const kolIKYerel = (tx: number, ty: number, secim: 'disa' | 'ice' | 'asagi' = 'disa'): [number, number] => {
   const L1 = GEO.ustKol;
   const L2 = GEO.onKol;
-  const d = Math.min(Math.hypot(tx, ty), L1 + L2 - 0.01);
+  const d = Math.max(0.01, Math.min(Math.hypot(tx, ty), L1 + L2 - 0.01));
   const aT = Math.atan2(-tx, ty);
   const alfa = Math.acos(Math.max(-1, Math.min(1, (L1 * L1 + d * d - L2 * L2) / (2 * L1 * d))));
-  // iki çözümden dirseği daha dışarıda (yerel -x) olanı ya da içeride olanı seç
   const [a1, a2] = [aT + alfa, aT - alfa];
-  const disa = -Math.sin(a1) < -Math.sin(a2) ? a1 : a2;
-  const omuz = dirsekDisa ? disa : disa === a1 ? a2 : a1;
+  let omuz: number;
+  if (secim === 'asagi') omuz = Math.cos(a1) > Math.cos(a2) ? a1 : a2;
+  else {
+    const disa = -Math.sin(a1) < -Math.sin(a2) ? a1 : a2;
+    omuz = secim === 'disa' ? disa : disa === a1 ? a2 : a1;
+  }
   const ex = -Math.sin(omuz) * L1;
   const ey = Math.cos(omuz) * L1;
   const phi = Math.atan2(-(tx - ex), ty - ey);
@@ -157,6 +157,34 @@ export const kolIK = (taraf: 'sol' | 'sag', x: number, y: number, dirsekDisa = t
   while (dirsek < -180) dirsek += 360;
   return [omuz * D, dirsek];
 };
+
+/**
+ * Önden görünüş kol IK'sı: eli (x, y) noktasına götüren [omuz, dirsek] açıları.
+ * dirsekDisa=true → dirsek gövdeden dışarı doğru kırılır.
+ */
+export const kolIK = (taraf: 'sol' | 'sag', x: number, y: number, dirsekDisa = true): [number, number] => {
+  const o = taraf === 'sol' ? GEO.omuzSol : GEO.omuzSag;
+  const tx = taraf === 'sol' ? x - o.x : o.x - x; // yerel uzay: -x = dışarı
+  return kolIKYerel(tx, y - o.y, dirsekDisa ? 'disa' : 'ice');
+};
+
+// ── 3/4 yan görünüş (donus: 0 = önden, 1 = sağa dönük) ──
+// Yan görünüşte kalçalar ve omuzlar birbirine yaklaşır; sol taraf "uzak" taraftır (gövdenin arkasında çizilir).
+/** Kalçanın gövde merkezine yatay uzaklığı. */
+export const kalcaDX = (donus: number) => (GEO.kalcaSag.x - 120) * (1 - 0.67 * donus);
+/** Uzak kalçanın yukarı kayması (derinlik hissi). */
+export const uzakKalcaDY = (donus: number) => -2 * donus;
+/** Omzun gövde merkezine yatay uzaklığı. */
+export const omuzDX = (donus: number) => (GEO.omuzSag.x - 120) * (1 - 0.7 * donus);
+/** Yan görünüşte (donus > 0.5) iki kol da "ileri = +x" aynasıyla çizilir. */
+export const yanMi = (donus: number) => donus > 0.5;
+
+/**
+ * Yan görünüş kol IK'sı (dünya koordinatı): omuz noktasından ele. Açılar "ileri = +" kuralında.
+ * secim 'asagi': dirsek aşağıda (dizde dirsek, çenede el gibi pozlar için).
+ */
+export const kolIKYan = (omuz: {x: number; y: number}, el: {x: number; y: number}, secim: 'disa' | 'ice' | 'asagi' = 'asagi') =>
+  kolIKYerel(-(el.x - omuz.x), el.y - omuz.y, secim);
 
 const ik = (taraf: 'sol' | 'sag', n: [number, number], dirsekDisa = true) => kolIK(taraf, n[0], n[1], dirsekDisa);
 const GIZLI = {kolSol: [0, 0] as [number, number], kolSag: [0, 0] as [number, number], kolGorunurSol: 0, kolGorunurSag: 0};

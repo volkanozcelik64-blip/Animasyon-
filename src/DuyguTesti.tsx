@@ -8,18 +8,23 @@ import {Kagit} from './Kagit';
 import {YAZI} from './font';
 
 // 10 sn hareket testi (1080×1920, 30 fps). Tüm vücut hareketi <Karakter hareketler={...}> ile:
-//   yuru → otur (sandalye) → [düşünceli] → kalk → [heyecanlı] → zipla → zipla
-// Duygu geçişleri yay sürüşlü; hareketler birbirinin bıraktığı yerden devam eder (ayaklar kaymaz).
+//   soldan yürüyerek girer → sandalyenin önünde arkasını dönüp oturur → [düşünceli] çenede el →
+//   ayağa kalkar, önüne döner → [heyecanlı] sandalyeden biraz uzaklaşır → ayaktayken iki kez zıplar.
+// Karakter ekran yüksekliğinin yaklaşık yarısı. Hareketler birbirinin bıraktığı yerden devam eder (ayaklar kaymaz).
 
 export const ADIMLAR: HareketAdimi[] = [
-  {hareket: 'yuru', baslangic: 0, x: -300, mesafe: 300, sure: 66},
-  {hareket: 'otur', baslangic: 72},
-  {hareket: 'kalk', baslangic: 200},
-  {hareket: 'zipla', baslangic: 222, yukseklik: 62},
-  {hareket: 'zipla', baslangic: 252, yukseklik: 62},
+  {hareket: 'yuru', baslangic: 0, x: -175, mesafe: 165, sure: 56},
+  {hareket: 'otur', baslangic: 60},
+  {hareket: 'dusun', baslangic: 104},
+  {hareket: 'kalk', baslangic: 166},
+  {hareket: 'yuru', baslangic: 206, mesafe: 40, sure: 22},
+  {hareket: 'zipla', baslangic: 236, yukseklik: 55},
+  {hareket: 'zipla', baslangic: 265, yukseklik: 55},
 ];
 
-const S = {dusunYuz: 90, fikir: 184, heyecanYuz: 190}; // fikir: düşünce balonu söner
+const S = {dusunYuz: 98, heyecanYuz: 206, balonBit: 160};
+/** Ekran px / karakter birimi: karakter ≈ 940 px (ekranın yarısı). */
+export const OLCEK = 6;
 
 const Etiket: React.FC<{yazi: string; opak: number; y: number}> = ({yazi, opak, y}) => (
   <div
@@ -76,9 +81,9 @@ export const DuyguTesti: React.FC = () => {
   }
 
   // ── yerleşim: karakter svg'si sabit, gövde içeride hareket eder ──
-  const K = 720;
-  const u = K / 240;
-  const ayakY = 1560;
+  const u = OLCEK;
+  const K = 240 * u;
+  const ayakY = 1640;
   const svgSol = width / 2 - 120 * u;
   const svgUst = ayakY - (GEO.zemin - 2) * u;
   const hd = hareketDurumu(ADIMLAR, f, fps);
@@ -95,7 +100,7 @@ export const DuyguTesti: React.FC = () => {
   const e3 = etiket(S.heyecanYuz + 4);
 
   const balonBas = S.dusunYuz + 22;
-  const balonCik = 1 - spring({frame: f - (S.fikir - 2), fps, config: {damping: 200}, durationInFrames: 8});
+  const balonCik = 1 - spring({frame: f - S.balonBit, fps, config: {damping: 200}, durationInFrames: 8});
 
   return (
     <AbsoluteFill>
@@ -105,7 +110,7 @@ export const DuyguTesti: React.FC = () => {
       <Etiket yazi="HEYECANLI" {...e3} />
 
       {f >= balonBas && balonCik > 0.001 && (
-        <div style={{position: 'absolute', left: kafaX + 80, top: kafaY - 400, opacity: balonCik}}>
+        <div style={{position: 'absolute', left: kafaX + 34 * u, top: kafaY - 50 * u - 250, opacity: balonCik}}>
           <DusunceBalonu f={f - balonBas} fps={fps} />
         </div>
       )}

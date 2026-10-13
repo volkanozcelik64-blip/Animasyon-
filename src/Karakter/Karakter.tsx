@@ -1,8 +1,8 @@
 import React, {useId} from 'react';
 import {Easing, useCurrentFrame, useVideoConfig} from 'remotion';
 import {bacakIK, kirpmaDegeri, nefes, sinirla} from './hareket';
-import {HareketAdi, HareketAdimi, SANDALYE_UST, hareketDurumu} from './hareketler';
-import {DUYGULAR, Duygu, ElTipi, Ekstra, GEO, Poz, Yuz as YuzTanimi, karistirPoz} from './pozlar';
+import {HareketAdi, HareketAdimi, SANDALYE, hareketDurumu} from './hareketler';
+import {DUYGULAR, Duygu, ElTipi, Ekstra, GEO, Poz, Yuz as YuzTanimi, kalcaDX, karistirPoz, omuzDX, uzakKalcaDY, yanMi} from './pozlar';
 
 // Stil: siyah el çizimi kontur, beyaz dolgu, yanakta hafif pembe.
 export const MUREKKEP = '#1d1b1b';
@@ -81,14 +81,22 @@ const El: React.FC<{tip: ElTipi; y: number}> = ({tip, y}) => {
 };
 
 /** Kol: omuzdan dirseğe (üst kol), dirsekten ele (ön kol); sağ taraf aynalanır. */
-const Kol: React.FC<{taraf: 'sol' | 'sag'; aci: [number, number]; el: ElTipi; gorunur: number}> = ({taraf, aci, el, gorunur}) => {
+const Kol: React.FC<{taraf: 'sol' | 'sag'; aci: [number, number]; el: ElTipi; gorunur: number; ayna?: number; omuzX?: number}> = ({
+  taraf,
+  aci,
+  el,
+  gorunur,
+  ayna,
+  omuzX,
+}) => {
   if (gorunur <= 0.01) return null;
-  const o = taraf === 'sol' ? GEO.omuzSol : GEO.omuzSag;
+  const o0 = taraf === 'sol' ? GEO.omuzSol : GEO.omuzSag;
+  const o = {x: omuzX ?? o0.x, y: o0.y};
   return (
     <g
       className={`kol kol-${taraf}`}
       opacity={gorunur}
-      transform={`translate(${o.x} ${o.y}) scale(${taraf === 'sol' ? 1 : -1} 1)`}
+      transform={`translate(${p(o.x)} ${o.y}) scale(${ayna ?? (taraf === 'sol' ? 1 : -1)} 1)`}
     >
       <g className="ust-kol" transform={`rotate(${p(aci[0])})`}>
         <line x1={0} y1={0} x2={0} y2={GEO.ustKol} />
@@ -596,12 +604,14 @@ const Yuz: React.FC<{once?: YuzTanimi; simdi: YuzTanimi; g: number; poz: Poz; ki
 };
 
 /** IK ile çizilen bacak: kalça → diz → bilek, ayak dışa bakan kısa çizgi. */
-const IKBacak: React.FC<{taraf: 'sol' | 'sag'; kalca: {x: number; y: number}; ayak: {x: number; y: number}}> = ({
+const IKBacak: React.FC<{taraf: 'sol' | 'sag'; kalca: {x: number; y: number}; ayak: {x: number; y: number}; dizYon?: -1 | 1}> = ({
   taraf,
   kalca,
   ayak,
+  dizYon,
 }) => {
-  const dis = taraf === 'sol' ? -1 : 1;
+  // önden: diz dışa; yan görünüşte: iki diz de ileri (+x), ayak ucu ileri bakar
+  const dis = dizYon ?? (taraf === 'sol' ? -1 : 1);
   const bilek = {x: ayak.x, y: ayak.y - 3};
   const {diz, ayak: uc} = bacakIK(kalca, bilek, GEO.uyluk, GEO.baldir, dis);
   return (
@@ -617,17 +627,27 @@ const IKBacak: React.FC<{taraf: 'sol' | 'sag'; kalca: {x: number; y: number}; ay
 
 const PELVIS = {x: 120, y: GEO.govdeAlt};
 
-/** Basit çizgi sandalye (önden): arkalık, oturak, dört ayak. Karakterin arkasında çizilir. */
+/**
+ * Basit çizgi sandalye, yandan görünüş: arkalık solda dik, oturak yatay, iki bacak.
+ * x = oturan karakterin gövde x'i. Karakterin arkasında çizilir.
+ */
 const Sandalye: React.FC<{x: number}> = ({x}) => {
-  const u = SANDALYE_UST;
-  const z = GEO.zemin - 2;
+  const z = GEO.zemin;
+  const x0 = 120 + x;
+  const ark = x0 + SANDALYE.arka;
+  const on = x0 + SANDALYE.on;
+  const u = SANDALYE.ust;
+  const k = SANDALYE.kalinlik;
+  const tepe = u - SANDALYE.arkalikBoy;
   return (
-    <g className="sandalye" transform={`translate(${p(x)} 0)`} fill="none" strokeWidth={3}>
-      <path d={`M88 ${u} L88 ${u - 50} Q120 ${u - 56} 152 ${u - 50} L152 ${u}`} />
-      <path d={`M90 ${u - 36} Q120 ${u - 40} 150 ${u - 36}`} strokeWidth={2.2} />
-      <path d={`M93 ${u} L93 ${z - 7} M147 ${u} L147 ${z - 7}`} strokeWidth={2.4} />
-      <path d={`M78 ${u + 4} L76 ${z} M162 ${u + 4} L164 ${z}`} />
-      <path d={`M76 ${u} Q120 ${u - 4} 164 ${u} L164 ${u + 6} Q120 ${u + 9} 76 ${u + 6} Z`} fill={BEYAZ} />
+    <g className="sandalye" fill="none" strokeWidth={3}>
+      {/* arka bacak + arkalık: tek dik çubuk */}
+      <path d={`M${p(ark)} ${z} L${p(ark)} ${tepe}`} />
+      <path d={`M${p(ark - 2.5)} ${tepe} L${p(ark + 2.5)} ${tepe}`} strokeWidth={3.4} />
+      {/* oturak */}
+      <path d={`M${p(ark - 1)} ${u} L${p(on + 3)} ${u} L${p(on + 3)} ${u + k} L${p(ark - 1)} ${u + k} Z`} fill={BEYAZ} />
+      {/* ön bacak */}
+      <path d={`M${p(on)} ${u + k} L${p(on)} ${z}`} />
     </g>
   );
 };
@@ -705,6 +725,13 @@ export const Karakter: React.FC<KarakterProps> = ({
   const kafaSy = 1 + (sy - 1) * 0.5;
 
   const elTipi: ElTipi = (g < 0.5 && once ? once.yuz.eller : simdi.yuz.eller) ?? 'duz';
+  const donus = hd?.donus ?? 0;
+  const yan = yanMi(donus);
+  const solKol = (
+    <g transform={`translate(${p((GEO.omuzSol.x - PELVIS.x) * (sx - 1))} 0)`}>
+      <Kol taraf="sol" aci={kolSol} el={elTipi} gorunur={poz.kolGorunurSol} omuzX={120 - omuzDX(donus)} ayna={yan ? -1 : 1} />
+    </g>
+  );
   const {kafa} = GEO;
   const boyun = GEO.boyun;
   const zipla = poz.ziplama;
@@ -772,8 +799,18 @@ export const Karakter: React.FC<KarakterProps> = ({
           <g className="bacaklar">
             {ayaklar ? (
               <>
-                <IKBacak taraf="sol" kalca={GEO.kalcaSol} ayak={{x: ayaklar.sol.x - govdeX, y: ayaklar.sol.y + zipla}} />
-                <IKBacak taraf="sag" kalca={GEO.kalcaSag} ayak={{x: ayaklar.sag.x - govdeX, y: ayaklar.sag.y + zipla}} />
+                <IKBacak
+                  taraf="sol"
+                  kalca={{x: 120 - kalcaDX(donus), y: GEO.kalcaSol.y + uzakKalcaDY(donus)}}
+                  ayak={{x: ayaklar.sol.x - govdeX, y: ayaklar.sol.y + zipla}}
+                  dizYon={yan ? 1 : -1}
+                />
+                <IKBacak
+                  taraf="sag"
+                  kalca={{x: 120 + kalcaDX(donus), y: GEO.kalcaSag.y}}
+                  ayak={{x: ayaklar.sag.x - govdeX, y: ayaklar.sag.y + zipla}}
+                  dizYon={1}
+                />
               </>
             ) : (
               <>
@@ -783,7 +820,9 @@ export const Karakter: React.FC<KarakterProps> = ({
             )}
           </g>
           <g className="ust-govde" transform={`rotate(${p(poz.govdeEgim)} ${PELVIS.x} ${PELVIS.y})`}>
-            <g transform={`translate(${PELVIS.x} ${PELVIS.y}) scale(${p(sx)} ${p(sy)}) translate(${-PELVIS.x} ${-PELVIS.y})`}>
+            {/* yan görünüşte uzak kol gövdenin arkasında */}
+            {yan && <g transform={`translate(0 ${p(omuzKay)})`}>{solKol}</g>}
+            <g transform={`translate(${PELVIS.x} ${PELVIS.y}) scale(${p(sx * (1 - 0.35 * donus))} ${p(sy)}) translate(${-PELVIS.x} ${-PELVIS.y})`}>
               <Govde />
             </g>
             {once && <GovdeEkleri liste={once.yuz.ekstralar} opak={1 - g} t={f} />}
@@ -791,15 +830,16 @@ export const Karakter: React.FC<KarakterProps> = ({
             <g className="kafa" transform={`translate(0 ${p(kafaKay)}) rotate(${p(poz.kafaEgim)} ${boyun.x} ${boyun.y})`}>
               <g transform={`translate(${kafa.x} ${kafa.y}) scale(${p(kafaSx)} ${p(kafaSy)})`}>
                 <circle cx={0} cy={0} r={kafa.r} fill={BEYAZ} />
-                <Yuz once={once?.yuz} simdi={simdi.yuz} g={g} poz={poz} kirpma={kirp} t={f} id={id} />
+                {/* 3/4 dönüşte yüz öne (sağa) kayar ve daralır */}
+                <g transform={`translate(${p(14 * donus)} 0) scale(${p(1 - 0.18 * donus)} 1)`}>
+                  <Yuz once={once?.yuz} simdi={simdi.yuz} g={g} poz={poz} kirpma={kirp} t={f} id={id} />
+                </g>
               </g>
             </g>
             <g className="kollar" transform={`translate(0 ${p(omuzKay)})`}>
-              <g transform={`translate(${p((GEO.omuzSol.x - PELVIS.x) * (sx - 1))} 0)`}>
-                <Kol taraf="sol" aci={kolSol} el={elTipi} gorunur={poz.kolGorunurSol} />
-              </g>
+              {!yan && solKol}
               <g transform={`translate(${p((GEO.omuzSag.x - PELVIS.x) * (sx - 1))} 0)`}>
-                <Kol taraf="sag" aci={kolSag} el={elTipi} gorunur={poz.kolGorunurSag} />
+                <Kol taraf="sag" aci={kolSag} el={elTipi} gorunur={poz.kolGorunurSag} omuzX={120 + omuzDX(donus)} ayna={-1} />
               </g>
             </g>
           </g>

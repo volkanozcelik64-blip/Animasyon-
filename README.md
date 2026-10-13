@@ -148,12 +148,19 @@ gizlenir ve gövde kafadan yere inen iki çizgi olarak görünür.
 ]} />
 ```
 
-Karakter kalça + diz (bacak IK) ve omuz + dirsek (kol açıları) noktalarından döner (`src/Karakter/hareketler.ts`):
+Karakter kalça + diz (bacak IK) ve omuz + dirsek (kol açıları) noktalarından döner; oturmak için
+önden görünüşten 3/4 yan görünüşe döner (`donus`: kalça/omuzlar yaklaşır, uzak kol gövdenin arkasında,
+dizler ileri kırılır, yüz öne kayar) (`src/Karakter/hareketler.ts`):
 
 - **yuru** — önden görünüşte yan adım; kollar ve bacaklar karşılıklı sallanır. `mesafe` (birim, − sola), `sure`.
-- **otur** — önce hafifçe doğrulur, dizler bükülür, gövde sandalyeye iner, değince basılır; kollar
-  dengelemek için açılıp bırakılır. Sandalye (basit çizgi) oturulan yerde otomatik çizilir (`sandalye` ile aç/kapa).
-- **kalk** — öne eğilir (kafa iner, bakış aşağı, gövde basılır), sonra itip yukarı uzar ve yerleşir.
+- **otur** — sandalyenin önünde durur, iki küçük adımla arkasını sandalyeye döner (3/4 yan görünüş),
+  kalça geriye ve aşağı kavis çizerken gövde öne eğilir, dizler bükülür, oturağa iner ve değince basılır.
+  Sonunda üst bacaklar oturakta yatay, dizler 90°, alt bacaklar yere dik, ayaklar yerde; dirsekler dizlerde.
+  Sandalye yandan, basit çizgiyle (arkalık solda dik, oturak yatay, iki bacak) oturulan yerde otomatik
+  çizilir ve karakterin arkasında kalır (`sandalye` ile aç/kapa).
+- **dusun** — otururken yakın ön kol dizden çeneye kalkar ("düşünen adam"), gövde ve kafa hafif eğilir.
+- **kalk** — öne eğilir (kafa iner, kollar öne), kalça öne-yukarı ayakların üstüne gelir, dikleşir,
+  iki küçük adımla yeniden önüne döner.
 - **zipla** — çömelir, kollar aşağı-geri → fırlar, kollar kalkar → kavisli uçuş, havada ayaklar toplanır
   ve gölge küçülür → inişte basılır, durur. `yukseklik`.
 - **dur** — yerinde durur (oturuyorsa oturmaya devam eder).
