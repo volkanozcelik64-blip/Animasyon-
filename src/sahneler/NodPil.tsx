@@ -14,10 +14,8 @@ import {
 } from '../karakter/hareketler';
 import { bilekNerede, bacakIK, type V } from '../karakter/ik';
 import { Balon, balonDurumu, sessizAgiz, type BalonTipi } from '../karakter/Balon';
-import { Kanepe, Minder, KANEPE } from '../esyalar/Kanepe';
-import { Dolap, DOLAP } from '../esyalar/Dolap';
-import { Priz } from '../esyalar/Priz';
-import { TavanLambasi } from '../esyalar/TavanLambasi';
+import { Minder, KANEPE } from '../esyalar/Kanepe';
+import { DOLAP } from '../esyalar/Dolap';
 import { AkilliTelefon, type TelefonEkrani } from '../esyalar/Telefon';
 import { Adaptor, KabloUcu, Kablo, KabloYumagi } from '../esyalar/Sarj';
 
@@ -28,16 +26,7 @@ export const SURE = 1050; // 35 sn
 
 const S = ekranOlcegi(YUKSEKLIK, 0.5); // nod-temel ile aynı: ayakta ekranın %50'si (zoom 1'de)
 
-// ---------------------------------------------------------------- oda yerleşimi (dünya, Nod birimi; zemin y=0)
-const ODA = {
-  kanepeX: 0,
-  oturX: -70, // Nod'un kanepede oturduğu kalça x'i
-  dolapX: 900,
-  dolapOnu: 790, // dolabın önünde durduğu yer (kalça)
-  prizX: 1560, prizY: -40,
-  lambaX: 620, tavanY: -1180,
-  yatX: 1212, yatY: -24, // yüzüstü/sırtüstü kalça
-} as const;
+import { ODA, Oda } from './pil/Oda';
 const ADAPTOR_ACIK = { x: 1515, y: -30 }; // pimlerin ucu: prize takılı DEĞİL (araya boşluk)
 const ADAPTOR_TAKILI = { x: 1544, y: -40 };
 
@@ -85,7 +74,7 @@ const A_UC = GORUNUS.ucdort, A_YAN = GORUNUS.yan;
 const OMUZ = OLCU.omuzY - OLCU.kalcaY;
 
 /** Kanepede oturan (3/4, sağa dönük), yakın el telefonu göğüs önünde tutar. */
-function kanepedeOturan(telefonYukari = 0): Poz {
+export function kanepedeOturan(telefonYukari = 0): Poz {
   const p = otur(1, 'ucdort');
   const avuc = { x: 34, y: OMUZ + 52 - telefonYukari };
   return { ...p, egim: 2, kafaEgim: 6, sagKol: kolHedef(A_UC.omuzX.sag, bilekNerede(avuc, 160, 14), 160, 'tut', true) };
@@ -459,20 +448,9 @@ export const Sahne: React.FC<{ kare: number }> = ({ kare: k }) => {
     <svg width={GENISLIK} height={YUKSEKLIK} viewBox={`0 0 ${GENISLIK} ${YUKSEKLIK}`}>
       <rect width={GENISLIK} height={YUKSEKLIK} fill="#ffffff" />
       <g transform={dunyaG}>
-        {/* duvar, süpürgelik, zemin */}
-        <rect x={-1400} y={ODA.tavanY} width={4400} height={-ODA.tavanY} fill="#ffffff" />
-        <rect x={-1400} y={ODA.tavanY - 40} width={4400} height={40} fill="#f2f4f7" />
-        <path d={`M-1400 ${ODA.tavanY}H3000`} stroke={RENK.murekkep} strokeWidth={5} />
-        <rect x={-1400} y={0} width={4400} height={700} fill="#eef1f5" />
-        <rect x={-1400} y={-18} width={4400} height={18} fill="#ffffff" stroke={RENK.murekkep} strokeWidth={4} />
-        <path d="M-1400 0H3000" stroke={RENK.murekkep} strokeWidth={5} />
-        {/* eşyalar */}
-        <g transform={`translate(${ODA.lambaX} ${ODA.tavanY})`}><TavanLambasi acik={lambaAcik} boy={160} /></g>
-        <g transform={`translate(${ODA.kanepeX} 0)`}><Kanepe minderler={[minder(k, 0).yerinde, minder(k, 1).yerinde]} /></g>
-        <g transform={`translate(${ODA.dolapX} 0)`}>
-          <Dolap acik={k < Z.cekmece + 2 ? 0 : yumusak(aralik(k, Z.cekmece + 2, Z.cekmece + 9))} />
-        </g>
-        <g transform={`translate(${ODA.prizX} ${ODA.prizY})`}><Priz /></g>
+        {/* oda: tüm bölümlerde aynı set */}
+        <Oda lambaAcik={lambaAcik} minderler={[minder(k, 0).yerinde, minder(k, 1).yerinde]}
+          cekmece={k < Z.cekmece + 2 ? 0 : yumusak(aralik(k, Z.cekmece + 2, Z.cekmece + 9))} />
         {/* fırlayan minderler */}
         {[0, 1].map((i) => { const m = minder(k, i as 0 | 1); return m.gorunur && !m.yerinde ? <g key={i} transform={`translate(${m.konum.x} ${m.konum.y}) rotate(${m.aci})`}><g transform={`translate(0 ${-KANEPE.minderKalinlik / 2})`}><Minder /></g></g> : null; })}
         {/* doğru kablo: adaptör ve kablo (Nod'un arkasında kalan kısım) */}
