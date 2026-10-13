@@ -23,18 +23,22 @@ export class AtkiYayi {
     const ax = vx - this.onceVx;
     this.onceX = boyunX; this.onceY = boyunY; this.onceVx = vx; this.onceVy = vy;
 
+    return this.ilerle(ax, egim);
+  }
+
+  /** İvmeyle ilerlet (yerel x ivmesi; dönüp aynalanınca konum sıçraması atkıyı fırlatmasın diye). */
+  ilerle(ax: number, egim = 0, vx = 0): AtkiDurumu {
     // Uç yerçekimiyle aşağı sarkmak ister: gövde eğilince yerel açısı -egim'e çekilir.
     // Boyun +x'e ivmelenince uç geride kalır → +açı (saat yönü, -x tarafına savrulur).
-    const hedef1 = -egim;
+    // Alt bölüm, kök bölümün açısal hızına geç kalır (kamçı).
+    // hızla giderken rüzgâr: uç geriye savrulur (vx: yerel x hızı, + ileri)
+    const hedef1 = -egim + Math.max(-75, Math.min(75, vx * 7));
     this.v1 += (hedef1 - this.a1) * this.sertlik1 + ax * this.kazanc;
     this.v1 *= this.sonum1;
     this.a1 += this.v1;
-
-    // alt bölüm, kök bölümün açısal ivmesine geç kalır
     this.v2 += (-this.a2) * this.sertlik2 - this.v1 * 0.35;
     this.v2 *= this.sonum2;
     this.a2 += this.v2;
-
     const sinir = (x: number, m: number) => Math.max(-m, Math.min(m, x));
     this.a1 = sinir(this.a1, 70); this.a2 = sinir(this.a2, 50);
     return { a1: this.a1, a2: this.a2 };

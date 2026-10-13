@@ -3,12 +3,16 @@
   "version": "1.0.0",
   "description": "",
   "scripts": {
-    "onizleme": "tsx scripts/onizleme.tsx"
+    "onizleme": "tsx scripts/onizleme.tsx",
+    "studio": "remotion studio src/index.ts",
+    "kareler": "tsx scripts/kareler.tsx",
+    "render:test": "remotion render src/index.ts NodTest video/nod-test.mp4 --codec=h264 --browser-executable=/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@remotion/cli": "^4.0.528",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "remotion": "^4.0.528"

@@ -7,7 +7,7 @@ import {
 } from './parcalar';
 import { YuzOzellikleri, YuzTonu, Ekler, bakisKafa, type Duygu } from './yuz';
 import { AYAKTA, DUYGU_POZLARI, type Poz, type Kol, type Bacak } from './poz';
-import { atkiSekli, atkiKaristir, atkiSalinim, type AtkiDurumAdi } from './atkiTepki';
+import { atkiSekli, atkiKaristir, atkiSalinim, atkiRuzgar, bezierParcalari, type AtkiDurumAdi, type AtkiSekli } from './atkiTepki';
 import { Ampul } from '../esyalar/Ampul';
 
 export type { Gorunus, ElPozu, Duygu, Poz, Agiz, Bakis };
@@ -36,12 +36,24 @@ export interface NodProps {
   olcek?: number;
   /** bakış (§2): önden göz bebekleri kayar; yan/3/4'te 'sol' karakteri sola döndürür (aynalar) */
   bak?: Bakis;
+  /** yan/3/4 görünüşte sola bakar (aynalar); bak'tan bağımsız, böylece sola bakarken yukarı da bakabilir */
+  sola?: boolean;
   /** konuşma ağzı (§8): duygunun üstüne uygulanır; 'kapali' = duygunun kendi ağzı */
   agiz?: Agiz;
   /** fikir anı: ampul belirir, atkı ucu ünlem gibi dikleşir */
   fikir?: boolean;
   /** atkı ucu duyguya tepki versin mi (§4). Vars. açık; kapalıyken düz sarkar (yalnızca follow-through). */
   atkiTepki?: boolean;
+  /** göz kırpma 0 (açık) … 1 (kapalı) */
+  kirp?: number;
+  /** kafa öne/arkaya (onay sallaması): -1 … 1; + = öne (yüz aşağı kayar) */
+  bas?: number;
+  /** kafanın sağa-sola dönüşü (radyan; "hayır" sallaması / giriş) */
+  kafaDonus?: number;
+  /** ampulün belirmesi 0 … 1 (fikir anı) */
+  fikirParlama?: number;
+  /** hata ayıklama: atkı ucunun bezier kontrol noktalarını göster */
+  atkiKontrol?: boolean;
   /** çizgi kaynaması (§6): konturlar her 4 karede 1-2px değişir. Vars. açık. */
   kaynama?: boolean;
   /** pozdaki el şeklini her iki el için ezer */
@@ -90,7 +102,8 @@ function BacakCiz({ bacak, x, s, gorunus }: { bacak: Bacak; x: number; s: number
 const Kafa: React.FC<{
   id: string; yaw: number; duygu: Duygu; onceki?: Duygu; t: number; kare: number;
   bak: Bakis; agiz: Agiz; ayna: boolean; arka: boolean;
-}> = ({ id, yaw, duygu, onceki, t, kare, bak, agiz, ayna, arka }) => {
+  kirp: number; bas: number; kafaDonus: number;
+}> = ({ id, yaw, duygu, onceki, t, kare, bak, agiz, ayna, arka, kirp, bas, kafaDonus }) => {
   const R = OLCU.kafaR;
   const sikis = 1 - 0.28 * Math.sin(Math.PI * t); // geçişte yüz hafifçe büzülüp açılır (kırpışma)
   const [donus, egim] = bakisKafa(bak); // bakış yönüne kafa ~5° döner/eğilir
@@ -98,7 +111,7 @@ const Kafa: React.FC<{
     op <= 0.001 ? null : (
       <g key={key} opacity={op}>
         {!arka && <g clipPath={`url(#${id}-kafa)`}><YuzTonu duygu={d} id={id} /></g>}
-        {!arka && <g clipPath={`url(#${id}-kafa)`}><g transform={`translate(0 ${2 + egim}) scale(1.12 ${1.12 * sikis})`}><YuzOzellikleri duygu={d} id={id} yaw={yaw + donus} bak={bak} agiz={agiz} /></g></g>}
+        {!arka && <g clipPath={`url(#${id}-kafa)`}><g transform={`translate(0 ${2 + egim + bas * 10}) scale(1.12 ${1.12 * sikis})`}><YuzOzellikleri duygu={d} id={id} yaw={yaw + donus + kafaDonus} bak={bak} agiz={agiz} kirp={kirp} /></g></g>}
       </g>
     );
   const ek = (d: Duygu, op: number, key: string) =>
@@ -121,6 +134,20 @@ const Kafa: React.FC<{
   );
 };
 
+/** Atkı ucunun bezier iskeleti: çapalar (dolu), tutamaçlar (boş), tutamaç çizgileri. */
+const BezierIskelet: React.FC<{ sekil: AtkiSekli }> = ({ sekil }) => (
+  <g opacity="0.9">
+    {bezierParcalari(sekil.kontrol).map(([a, b, c, d], i) => (
+      <g key={i}>
+        <path d={`M${a.x} ${a.y}L${b.x} ${b.y}M${d.x} ${d.y}L${c.x} ${c.y}`} stroke="#1e90ff" strokeWidth="0.8" />
+        <circle cx={b.x} cy={b.y} r="1.6" fill="#fff" stroke="#1e90ff" strokeWidth="0.8" />
+        <circle cx={c.x} cy={c.y} r="1.6" fill="#fff" stroke="#1e90ff" strokeWidth="0.8" />
+      </g>
+    ))}
+    {sekil.kontrol.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r="2.2" fill="#1e90ff" />)}
+  </g>
+);
+
 // ---------------------------------------------------------------- karakter
 export const Nod: React.FC<NodProps> = (p) => {
   const id = (p.id ?? 'k').replace(/[^a-zA-Z0-9_-]/g, '');
@@ -133,8 +160,9 @@ export const Nod: React.FC<NodProps> = (p) => {
   const t = p.gecis ?? 1;
   const kare = p.kare ?? 0;
   const bak: Bakis = p.bak ?? 'izleyici';
-  const ayna = bak === 'sol' && g !== 'on' && g !== 'arka';
-  const gozBak: Bakis = ayna ? 'izleyici' : g === 'on' ? bak : bak === 'yukari' || bak === 'asagi' ? bak : 'izleyici';
+  // yan/3/4'te sola bakma: açıkça `sola` ile ya da bak="sol" ile
+  const ayna = g !== 'on' && g !== 'arka' && (p.sola ?? bak === 'sol');
+  const gozBak: Bakis = g === 'on' ? bak : bak === 'yukari' || bak === 'asagi' ? bak : 'izleyici';
   const [ux, uy] = atkiUcNoktasi(g);
 
   // önden: karakterin sağ ayakkabısı ekranın soluna döner; arkadan tersi
@@ -166,7 +194,9 @@ export const Nod: React.FC<NodProps> = (p) => {
   const gecisVar = tepki && !p.fikir && p.oncekiDuygu && p.oncekiDuygu !== duygu && t < 1;
   const sekil0 = atkiSekli(durum, kare, g);
   const sekil1 = gecisVar ? atkiKaristir(atkiSekli(p.oncekiDuygu!, kare, g), sekil0, t) : sekil0;
-  const uc = atkiSalinim(sekil1, poz.atki.a1 - poz.egim, poz.atki.a2);
+  // güçlü geriye savrulmada (yürüme/koşma) uç uzar ve dalgalanır
+  const ruzgar = Math.max(0, Math.min(1, (Math.abs(poz.atki.a1) - 25) / 40));
+  const uc = atkiSalinim(atkiRuzgar(sekil1, ruzgar, kare), poz.atki.a1 - poz.egim, poz.atki.a2);
   const ucX = g === 'ucdort' ? ux * ATKI.ucdortOlcek + 4 : g === 'on' ? ux * ATKI.onOlcek : ux; // arka/yan: ölçeksiz
 
   // çizgi kaynaması: her KAYNAMA.aralik karede yeni bir gürültü; Remotion random(seed) ile deterministik
@@ -203,10 +233,11 @@ export const Nod: React.FC<NodProps> = (p) => {
           {/* kollar (borular atkının arkasında) */}
           {onKollar.map((tf) => kol(tf, 'tup'))}
           {/* kafa */}
-          <g transform={`translate(0 ${BOYUN}) rotate(${poz.kafaEgim}) translate(0 ${KAFA - BOYUN})`}>
+          <g transform={`translate(0 ${BOYUN}) rotate(${poz.kafaEgim}) translate(0 ${KAFA - BOYUN + (p.bas ?? 0) * 3})`}>
             <Kafa id={id} yaw={A.yaw} duygu={duygu} onceki={p.oncekiDuygu} t={t} kare={kare}
+              kirp={p.kirp ?? 0} bas={p.bas ?? 0} kafaDonus={p.kafaDonus ?? 0}
               bak={gozBak} agiz={p.agiz ?? 'kapali'} ayna={ayna} arka={g === 'arka'} />
-            {p.fikir && <g transform={`translate(0 ${-OLCU.kafaR - 20}) ${ayna ? 'scale(-1 1)' : ''}`}><Ampul /></g>}
+            {p.fikir && <g transform={`translate(0 ${-OLCU.kafaR - 20}) ${ayna ? 'scale(-1 1)' : ''}`}><Ampul parlama={p.fikirParlama ?? 1} /></g>}
           </g>
           {/* atkı: sarılı kısım, sarkan uç, önündeki kıvrım/düğüm (arkadan uç ve kıvrım görünmez) */}
           <g transform={`translate(0 ${BOYUN})`}>
@@ -222,6 +253,7 @@ export const Nod: React.FC<NodProps> = (p) => {
                 {!uc.onde && <g transform={`translate(${ucX} ${uy})`}><AtkiUcu id={id} sekil={uc} /></g>}
                 <g transform={atkiDonus}><AtkiOn id={id} gorunus={atkiGorunus} /></g>
                 {uc.onde && <g transform={`translate(${ucX} ${uy})`}><AtkiUcu id={id} sekil={uc} /></g>}
+                {p.atkiKontrol && <g transform={`translate(${ucX} ${uy})`}><BezierIskelet sekil={uc} /></g>}
               </>
             )}
           </g>

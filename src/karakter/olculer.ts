@@ -117,8 +117,9 @@ export type Agiz = (typeof AGIZLAR)[number];
 export type Bakis = 'sol' | 'sag' | 'yukari' | 'asagi' | 'izleyici';
 export const BAKIS = {
   gozBebegi: 14, // yatay göz bebeği kayması (eskisinin 2 katı)
-  gozBebegiDikey: 9, // dikey kayma (göz yuvası dikeyde daha dar)
+  gozBebegiYukari: 12, // dikey kayma: göz bebeği göz alanının üst kenarına değer
+  gozBebegiAsagi: 9, // aşağıda ağız var: bebek alt kenara iner ama ağza değmez
   kafaDonus: 0.09, // sol/sag: kafa dönüşü (radyan, ~5°) — yüz küre üstünde kayar
-  kafaEgim: 7, // yukari/asagi: yüzün yukarı/aşağı kayması (~5° eğim)
-  kasKalkma: 5, // yukari: kaşlar kalkar
+  kafaEgim: 11, // yukari/asagi: yüzün yukarı/aşağı kayması (≈7° eğim)
+  kasKalkma: 8, // yukari: kaşlar belirgin kalkar (asagi: kaşlar normal)
 } as const;

@@ -231,44 +231,37 @@ async function main() {
   ${sAgiz}${sArka}${sDuygu}${sBakis}${sEsya}`;
   await cek('karakter-sayfasi.png', sayfaHtml, 1920, 2850);
 
-  // ------------------------------------------------ DÜZELTMELER (yalnızca düzeltilen kısımlar)
-  const yakin = (id: string, el: React.ReactElement, w = 300, ust = 95, yuk = 260) => svg(
-    <svg viewBox={`-130 ${OLCU.kafaY - ust} 260 ${yuk}`} width={w} height={w * yuk / 260}>{el}</svg>);
-  const dDus = bolum('1 · DÜŞÜNCELİ', hucreler([
-    etiketli(boy('dz0', <Nod id="dz0" duygu="dusunceli" kare={20} />, 330), 'tam boy', 340),
-    etiketli(yakin('dz1', <Nod id="dz1" duygu="dusunceli" kare={20} golge={false} />, 420), 'yakın: işaret parmağı yanakta, başparmak çenenin altında', 440),
-  ]), 'dirsek bükülü · kafa 6° yatık · göz bebekleri yukarı-yana · sağ kaş kalkık · ağız küçük, yana kaymış');
-  const bak5: Bakis[] = ['sol', 'sag', 'yukari', 'asagi', 'izleyici'];
-  const dBak = bolum('2 · BAKIŞ YÖNLERİ', hucreler(
-    bak5.map((b, i) => etiketli(kafa(`dbk${i}`, <Nod id={`dbk${i}`} bak={b} golge={false} />, 250), b, 260)),
-  ) + `<div class="alt">Küçük boyutta (90px) okunurluk testi:</div>` + hucreler(
-    bak5.map((b, i) => etiketli(kafa(`dbs${i}`, <Nod id={`dbs${i}`} bak={b} golge={false} />, 90), b, 110)),
-  ), 'göz bebeği kayması 2×, kafa ~5° döner/eğilir, yukarıda kaş kalkar, aşağıda kapak iner');
-  const dU = bolum('3 · U AĞZI', hucreler([
-    etiketli(kafa('du0', <Nod id="du0" agiz="O" golge={false} />, 250), 'O (karşılaştırma)', 260),
-    etiketli(kafa('du1', <Nod id="du1" agiz="U" golge={false} />, 250), 'U — öne büzülmüş dudak', 260),
-    etiketli(kafa('du2', <Nod id="du2" agiz="U" duygu="mutlu" golge={false} />, 250), 'mutlu + U', 260),
-  ]));
-  const dSik = bolum('4 · SIKILMIŞ', hucreler([
-    etiketli(boy('ds0', <Nod id="ds0" duygu="sikilmis" kare={20} />, 330), 'tam boy', 340),
-    etiketli(yakin('ds1', <Nod id="ds1" duygu="sikilmis" kare={20} golge={false} />, 420), 'yakın: yanak avuçta, ağız açıkta', 440),
-  ]), 'kafa ele doğru 8° yatık · yarı kapalı gözler');
-  const sandVB = '-200 -560 400 590';
-  const sand = (el: React.ReactElement, w = 360) => svg(<svg viewBox={sandVB} width={w} height={w * 590 / 400}>{el}</svg>);
-  const dSand = bolum('5 · SANDALYE (yeniden)', hucreler([
-    etiketli(sand(<Sandalye />), 'sandalye (yandan)', 370),
-    etiketli(sand(<g><SandalyeArka /><Nod id="dsn0" poz={OTURAN} duygu="mutlu" kare={8} golge={false} /><SandalyeOn /></g>), 'Nod oturuyor: minder = diz hizası', 370),
-    etiketli(svg(<svg viewBox="-260 -560 520 590" width="470" height={470 * 590 / 520}>
-      <g transform="translate(-90 0)"><Nod id="dsn1" gorunus="yan" kare={8} /></g>
-      <g transform="translate(110 0)"><Sandalye /></g></svg>), 'Nod ayakta, sandalyenin yanında', 480),
-  ]), 'masayla aynı kontur kalınlığı · arkalıklı · ön bacak Nod\'un önünde');
-  await cek('duzeltmeler.png', `<style>
+  // ------------------------------------------------ BAKIŞ + U (düzeltilmiş)
+  const stilCss = `<style>
     .bolum{font-size:26px;font-weight:bold;color:#222;border-bottom:3px solid #222;padding-bottom:6px;margin-bottom:12px}
     .not{font-size:17px;font-weight:normal;color:#666;margin-left:16px}
     .alt{font-size:18px;color:#555;margin:6px 0 4px}
-  </style>
-  <div style="padding:26px 40px 10px;font-size:36px;font-weight:bold">NOD — Düzeltmeler</div>
-  ${dDus}${dBak}${dU}${dSik}${dSand}`, 1500, 2900);
+  </style>`;
+  const bak5: Bakis[] = ['sol', 'sag', 'yukari', 'asagi', 'izleyici'];
+  await cek('bakis-ve-u.png', `${stilCss}
+  <div style="padding:26px 40px 10px;font-size:36px;font-weight:bold">NOD — Bakış yönleri + U ağzı</div>
+  ${bolum('BAKIŞ YÖNLERİ', hucreler(
+    bak5.map((b, i) => etiketli(kafa(`dbk${i}`, <Nod id={`dbk${i}`} bak={b} golge={false} />, 250), b, 260)),
+  ) + `<div class="alt">Küçük boyutta (70px):</div>` + hucreler(
+    bak5.map((b, i) => etiketli(kafa(`dbs${i}`, <Nod id={`dbs${i}`} bak={b} golge={false} />, 70), b, 100)),
+  ), 'yukari: bebekler üst kenarda, kaşlar kalkık, kafa ~7° yukarı · asagi: bebekler alt kenarda, kaşlar normal, kafa ~7° öne')}
+  ${bolum('U AĞZI', hucreler([
+    etiketli(kafa('du0', <Nod id="du0" agiz="O" golge={false} />, 250), 'O (karşılaştırma)', 260),
+    etiketli(kafa('du1', <Nod id="du1" agiz="U" golge={false} />, 250), 'U', 260),
+    etiketli(kafa('du2', <Nod id="du2" agiz="U" duygu="mutlu" golge={false} />, 250), 'mutlu + U', 260),
+  ]))}`, 1460, 1150);
+
+  // ------------------------------------------------ ATKI ŞEKİLLERİ: 9 duygu yan yana (bezier iskeletiyle)
+  const dokuz: Duygu[] = ['mutlu', 'heyecanli', 'uzgun', 'kizgin', 'korkmus', 'kafasi_karisik', 'asik', 'uykulu', 'dusunceli'];
+  const atkiHucre = (d: Duygu, i: number, iskelet: boolean) => svg(
+    <svg viewBox={`-120 ${OLCU.kafaY - 80} 240 300`} width="200" height="250">
+      <Nod id={`as${i}${iskelet ? 'b' : ''}`} poz={AYAKTA.on} duygu={d} kare={14} golge={false} kaynama={false} atkiKontrol={iskelet} />
+    </svg>);
+  await cek('atki-sekilleri.png', `${stilCss}
+  <div style="padding:22px 30px 6px;font-size:32px;font-weight:bold">NOD — Atkı = ikinci yüz (9 duygu)</div>
+  <div style="padding:0 30px;font-size:18px;color:#555">Üst sıra: çizim · Alt sıra: aynı kare, atkı ucunun bezier iskeleti (mavi: çapalar ve tutamaçlar)</div>
+  <div style="display:flex;padding:10px 20px 0">${dokuz.map((d, i) => `<div style="text-align:center">${atkiHucre(d, i, false)}<div class="etiket" style="font-size:17px">${(tepkiAd[d] ?? d).toUpperCase()}</div></div>`).join('')}</div>
+  <div style="display:flex;padding:6px 20px 0">${dokuz.map((d, i) => atkiHucre(d, i, true)).join('')}</div>`, 1840, 660);
 
   await tarayici.close();
 }
