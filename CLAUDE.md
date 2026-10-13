@@ -18,6 +18,7 @@
 - Ses efektleri sentezlenir: `npm run sfx` → `assets/sfx/*.wav`; sahne `SESLER` listesiyle `<Sequence><Audio/></Sequence>`.
 - Örnek: "1% Battery" `src/sahneler/NodPil.tsx` → `npm run render:pil` → `video/nod-pil.mp4` (35 sn, 1920×1080, 30 fps). Kontrol: `SAHNE=pil npm run kareler -- …`.
 - "1% Battery" 5 bölüm: ortak oda `src/sahneler/pil/Oda.tsx`; bölüm 1 `src/sahneler/Sarj1.tsx` → `npm run render:sarj1` → `video/sarj1.mp4`. Telefon: `src/esyalar/ModernTelefon.tsx` (9:19,5; durum çubuğu; ekranda Just Nod kanal sayfası, marka logosu yok).
+- "1% Battery" SHORTS (dikey 1080×1920, 30 fps, 3 bölüm ~22 sn): `src/sahneler/Short1.tsx` → `npm run render:short1` → `video/short1.mp4`. Kurallar: Nod ekranın %40-55'i; önemli her şey orta %70'te; alt %20 ve sağ kenara yazı/balon yok; ≤2 sn'de bir kesme/kamera hareketi; balon ≤4 kelime, hızlı yazı (`hiz`); her aksiyonda ses. Telefon tutuşu `src/karakter/TelefonTutus.tsx` (telefon bileklere bağlı).
 
 ## Pipeline (current): Mixamo + Blender, flat 2D cartoon look
 - Blender runs headless only: `blender -b -P script.py [-- args]` (Ubuntu package, Blender 4.0.2; EEVEE renders via Mesa software EGL).

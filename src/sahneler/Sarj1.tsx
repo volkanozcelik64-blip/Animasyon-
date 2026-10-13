@@ -40,7 +40,7 @@ const A_UC = GORUNUS.ucdort;
 const TEL_MERKEZ: V = { x: 26, y: -40 };
 
 /** Bilekler telefonun yanlarında (kollar gövdenin yanından, dirsekler bükülü); telefon bileklere bağlı. */
-function tutanPoz(titre: V = { x: 0, y: 0 }, yukari = 0): Poz {
+export function tutanPoz(titre: V = { x: 0, y: 0 }, yukari = 0): Poz {
   const p = otur(1, 'ucdort');
   const c = { x: TEL_MERKEZ.x + titre.x, y: TEL_MERKEZ.y - yukari + titre.y };
   const bSol = yereldenDunyaya(c, 0, bilekYerel(-1, ONDEN));
@@ -54,7 +54,7 @@ function tutanPoz(titre: V = { x: 0, y: 0 }, yukari = 0): Poz {
 }
 
 /** Dünyadaki iki bilekten telefonun yeri + ön kol açıları (eldiven bileklikleri için). */
-function telefonVeKollar(poz: Poz, yer: (p: V) => V) {
+export function telefonVeKollar(poz: Poz, yer: (p: V) => V) {
   const bSol = yer(elKonumu(poz, 'sag').bilek), bSag = yer(elKonumu(poz, 'sol').bilek);
   const onKol = (kol: Poz['sagKol']) => kol.omuz + kol.dirsek + poz.egim + 90;
   return { ...telefonYeri(bSol, bSag, ONDEN), onKolSol: onKol(poz.sagKol), onKolSag: onKol(poz.solKol) };
@@ -66,7 +66,7 @@ interface NodDurumu {
 }
 
 /** Gülme: kısa hızlı sarsıntılar (ağız açılıp kapanır, omuzlar titrer). */
-function gulme(k: number) {
+export function gulme(k: number) {
   const g = k < Z.gulmeBiter ? 1 : Math.max(0, 1 - (k - Z.gulmeBiter) / 8);
   const v = Math.abs(Math.sin(k * 0.95)) * g;
   return { g, v };

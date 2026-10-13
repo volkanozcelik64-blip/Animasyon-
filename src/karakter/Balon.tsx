@@ -36,22 +36,25 @@ export interface BalonProps {
   olcek?: number;
   /** karanlıkta: siyah dolgu, beyaz kontur ve yazı */
   karanlik?: boolean;
+  /** yazma hızı çarpanı (Shorts: hızlı) */
+  hiz?: number;
 }
 
 const kelimeSayisi = (m: string) => m.trim().split(/\s+/).filter(Boolean).length;
 
 /** Yazının tamamlanması + kelime başına 0,3 sn okuma; balonun ekranda kalacağı en kısa süre (kare). */
-export function balonSuresi(metin: string, tip: BalonTipi = 'normal', fps = 30): number {
-  const yazma = ACILIS + Math.ceil(metin.length / AYAR[tip].hiz);
+export function balonSuresi(metin: string, tip: BalonTipi = 'normal', fps = 30, hiz = 1): number {
+  const yazma = ACILIS + Math.ceil(metin.length / (AYAR[tip].hiz * hiz));
   return yazma + Math.ceil(kelimeSayisi(metin) * KELIME_SN * fps) + 4;
 }
 
 /** Balonun o karede açık olup olmadığı ve yazılan harf sayısı (sessiz konuşma için). */
-export function balonDurumu(p: { metin: string; tip?: BalonTipi; kare: number; baslangic: number; sure?: number; fps?: number }) {
+export function balonDurumu(p: { metin: string; tip?: BalonTipi; kare: number; baslangic: number; sure?: number; fps?: number; hiz?: number }) {
   const tip = p.tip ?? 'normal';
-  const sure = Math.max(p.sure ?? 0, balonSuresi(p.metin, tip, p.fps ?? 30));
+  const hiz = AYAR[tip].hiz * (p.hiz ?? 1);
+  const sure = Math.max(p.sure ?? 0, balonSuresi(p.metin, tip, p.fps ?? 30, p.hiz ?? 1));
   const t = p.kare - p.baslangic;
-  const harf = Math.max(0, Math.min(p.metin.length, Math.floor((t - ACILIS) * AYAR[tip].hiz)));
+  const harf = Math.max(0, Math.min(p.metin.length, Math.floor((t - ACILIS) * hiz)));
   return { t, sure, gorunur: t >= 0 && t < sure + KAPANIS, yaziyor: t >= ACILIS && harf < p.metin.length, harf };
 }
 
