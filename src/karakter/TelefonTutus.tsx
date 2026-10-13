@@ -52,6 +52,25 @@ const Parmak: React.FC<{ a: V; b: V; w: number; o: number }> = ({ a, b, w, o }) 
   </g>
 );
 
+/** Kıvrık parmak: kökten uca hafif yay (boğum) çizen kontürlü kalın çizgi. */
+const Kivrik: React.FC<{ a: V; c: V; b: V; w: number; o: number }> = ({ a, c, b, w, o }) => {
+  const d = `M${a.x} ${a.y}Q${c.x} ${c.y} ${b.x} ${b.y}`;
+  return (
+    <g fill="none" strokeLinecap="round">
+      <path d={d} stroke={K} strokeWidth={w + 2 * o} />
+      <path d={d} stroke={B} strokeWidth={w} />
+    </g>
+  );
+};
+
+/** Avuç: kenarı saran dikey oval eldiven. */
+const Avuc: React.FC<{ p: V; rx: number; ry: number; o: number; aci?: number }> = ({ p, rx, ry, o, aci = 0 }) => (
+  <g transform={`translate(${p.x} ${p.y}) rotate(${aci})`}>
+    <ellipse rx={rx + o} ry={ry + o} fill={K} />
+    <ellipse rx={rx} ry={ry} fill={B} />
+  </g>
+);
+
 export interface TelefonluEllerProps extends Omit<ModernTelefonProps, 'yuz'> {
   yuz: 'ekran' | 'sirt';
   kavrayis: Kavrayis;
@@ -70,22 +89,17 @@ export const TelefonluEller: React.FC<TelefonluEllerProps> = ({ yuz, kavrayis: k
   const w = 6.5 * OLCU.elOlcek * s; // parmak kalınlığı
   const hx = TEL_YARI.x, hy = TEL_YARI.y;
 
-  const el = (t: 1 | -1) => {
-    const avuc = { x: t * (hx + 2 * s), y: kv.tutY };
-    const bilek = bilekYerel(t, kv);
-    return { avuc, bilek };
-  };
-
   const avuclar = ([-1, 1] as const).map((t) => {
-    const { avuc, bilek } = el(t);
+    // avuç kenarı sarar: dikey oval, telefonun kenarına yaslı, hafif içe eğik
+    const avuc = { x: t * (hx + 1.5 * s), y: kv.tutY + 5 * s };
+    const bilek = bilekYerel(t, kv);
     const onKol = (t < 0 ? onKolSol : onKolSag) - aci;
     return (
       <g key={`a${t}`}>
-        {/* avuç ile bilek arası (eldiven bileği) */}
-        <Parmak a={avuc} b={bilek} w={r * 1.25} o={o} />
-        <circle cx={avuc.x} cy={avuc.y} r={r + o} fill={K} />
-        <circle cx={avuc.x} cy={avuc.y} r={r} fill={B} />
-        <circle cx={bilek.x} cy={bilek.y} r={r * 0.62} fill={B} />
+        {/* bilek: avuçtan bilekliğe eldiven gövdesi */}
+        <Parmak a={avuc} b={bilek} w={r * 1.2} o={o} />
+        <Avuc p={avuc} rx={r * 0.78} ry={r * 1.12} o={o} aci={t * -8} />
+        <circle cx={bilek.x} cy={bilek.y} r={r * 0.6} fill={B} />
         {/* bileklik: ön kola dik */}
         <g transform={`translate(${bilek.x} ${bilek.y}) rotate(${onKol - 90}) scale(${OLCU.elOlcek * s})`}>
           <rect x="-10" y="-5" width="20" height="10" rx="3" fill={RENK.bileklik} stroke={K} strokeWidth={CIZGI.bileklik} />
@@ -95,46 +109,51 @@ export const TelefonluEller: React.FC<TelefonluEllerProps> = ({ yuz, kavrayis: k
     );
   });
 
-  // dört parmak: avucun dış kenarından telefonun gövdesine doğru (alttan yukarı sıralı)
-  const parmakY = (i: number) => kv.tutY + 10 * s - i * 11.5 * s;
-
   if (yuz === 'sirt') {
-    // önden: avuçlar yanlarda, telefon avuçların önünde, parmaklar sırtı sarar; uçlar kenardan hafif taşar
+    // önden: avuçlar kenarları sarar → telefon → parmaklar sırtta yelpaze gibi açılır (farklı boy ve açı);
+    // serçe parmak küçük ve alttan destekler; başparmaklar ekran tarafında, görünmez
+    const parmaklar = [
+      // [kök y, uç x içeri, uç y, kalınlık oranı, yay]
+      { y: -15, ic: 12, uy: -21, k: 0.9, yay: -3 }, // işaret
+      { y: -4, ic: 15, uy: -7, k: 0.95, yay: -3 }, // orta
+      { y: 7, ic: 13, uy: 6, k: 0.92, yay: -2.5 }, // yüzük
+      { y: 17, ic: 8, uy: 19, k: 0.8, yay: -1.5 }, // serçe
+    ];
     return (
       <g>
         {avuclar}
         <g transform={`scale(${TEL_OLCEK * 0.92} ${TEL_OLCEK})`}><ModernTelefon {...tel} yuz="sirt" /></g>
         {([-1, 1] as const).map((t) => (
           <g key={`p${t}`}>
-            {[3, 2, 1, 0].map((i) => {
-              const y = parmakY(i);
-              // parmak kökü avucun içinde (telefonun dışında), ucu sırtın üstünde
-              return <Parmak key={i} a={{ x: t * (hx + 9 * s), y: y + 3 * s }} b={{ x: t * (hx - 13 * s - (i === 0 ? 0 : 2 * s)), y: y - 3 * s }} w={w} o={o} />;
+            {parmaklar.map((f, i) => {
+              const a = { x: t * (hx + 4 * s), y: kv.tutY + f.y * s };
+              const b = { x: t * (hx - f.ic * s), y: kv.tutY + f.uy * s };
+              const c = { x: (a.x + b.x) / 2 + t * 1 * s, y: (a.y + b.y) / 2 + f.yay * s };
+              return <Kivrik key={i} a={a} c={c} b={b} w={w * f.k} o={o} />;
             })}
-            {/* parmak boğumu çizgisi: kenarı sarma */}
-            <path d={`M${t * (hx + 1)} ${parmakY(3) - 6 * s}V${parmakY(0) + 6 * s}`} stroke={K} strokeWidth={CIZGI.atkiDetay * 1.4} strokeLinecap="round" opacity={0.55} />
           </g>
         ))}
       </g>
     );
   }
 
-  // omuz arkası: parmaklar telefonun arkasından dolanır, uçları yan kenarlardan görünür
+  // omuz arkası: parmak uçları telefonun arkasından yan kenarlarda hafifçe görünür → avuçlar alt köşeleri kavrar
+  // → telefon → başparmaklar ekranın alt yarısında, kenara yakın, hafif kıvrık
   return (
     <g>
       {([-1, 1] as const).map((t) => (
         <g key={`p${t}`}>
-          {[0, 1, 2, 3].map((i) => {
-            const y = parmakY(i) - 6 * s;
-            return <Parmak key={i} a={{ x: t * (hx - 16 * s), y }} b={{ x: t * (hx + 5 * s), y: y - 2 * s }} w={w} o={o} />;
-          })}
+          {[-30, -20, -10].map((dy, i) => (
+            <Kivrik key={i} a={{ x: t * (hx - 8 * s), y: kv.tutY + dy * s }} c={{ x: t * (hx - 1 * s), y: kv.tutY + (dy - 2.5) * s }}
+              b={{ x: t * (hx + (3.5 - i * 0.6) * s), y: kv.tutY + (dy - 1) * s }} w={w * 0.88} o={o} />
+          ))}
         </g>
       ))}
       {avuclar}
       <g transform={`scale(${TEL_OLCEK})`}><ModernTelefon {...tel} yuz="ekran" /></g>
-      {/* başparmaklar: ekranın alt yarısında, kenarlara yakın */}
       {([-1, 1] as const).map((t) => (
-        <Parmak key={`b${t}`} a={{ x: t * (hx + 3 * s), y: kv.tutY - 2 * s }} b={{ x: t * (hx - 9 * s), y: kv.tutY - 15 * s }} w={w} o={o} />
+        <Kivrik key={`b${t}`} a={{ x: t * (hx + 4 * s), y: kv.tutY + 1 * s }} c={{ x: t * (hx - 2 * s), y: kv.tutY - 11 * s }}
+          b={{ x: t * (hx - 9 * s), y: kv.tutY - 14 * s }} w={w * 0.95} o={o} />
       ))}
     </g>
   );
