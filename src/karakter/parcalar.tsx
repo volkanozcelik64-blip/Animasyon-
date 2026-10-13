@@ -4,7 +4,8 @@ import { seritYolu, type AtkiSekli } from './atkiTepki';
 
 import type { GorunusAdi } from './olculer';
 export type Gorunus = GorunusAdi;
-export type ElPozu = 'acik' | 'yumruk' | 'isaret' | 'salla' | 'tut';
+/** cene: düşünme eli — işaret parmağı yanakta, başparmak çenenin altında (çeneyi tutar). */
+export type ElPozu = 'acik' | 'yumruk' | 'isaret' | 'salla' | 'tut' | 'cene';
 
 // ---------------------------------------------------------------- defs
 // Örgü dokusu: koyu ince ilmek çizgileri + açık ilmek noktaları.
@@ -87,6 +88,14 @@ function elParcalari(poz: ElPozu, s: number): Parca[] {
         { t: 'k', x1: -5, y1: 22, x2: 5, y2: 22, w: 13, kat: 'birlesik' },
         { t: 'k', x1: 10 * s, y1: 12, x2: 0, y2: 18, w: 6.5, kat: 'ust' },
       ];
+    case 'cene':
+      return [
+        // işaret parmağı dış yanda yukarı (yanak boyunca), başparmak içe doğru yatay (çenenin altı): L biçimi
+        { t: 'k', x1: -5 * s, y1: 22, x2: -9 * s, y2: 40, w: 7, kat: 'alt' },
+        { t: 'c', x: 0, y: 14, r: 11.5, kat: 'birlesik' },
+        { t: 'k', x1: -5, y1: 22, x2: 5, y2: 22, w: 13, kat: 'birlesik' },
+        { t: 'k', x1: 8 * s, y1: 20, x2: 17 * s, y2: 24, w: 6.5, kat: 'ust' },
+      ];
     case 'tut':
       return [
         { t: 'c', x: 0, y: 15, r: 11, kat: 'birlesik' },
@@ -136,8 +145,8 @@ export const El: React.FC<{ poz: ElPozu; s?: number; nesne?: React.ReactNode }> 
         </g>
       ))}
       {/* yumruk: kıvrık parmak çizgileri */}
-      {(poz === 'yumruk' || poz === 'isaret') && (
-        <path d={poz === 'yumruk' ? 'M-4 21V29M1.5 21.5V29.5M7 21V28' : `M${-0.5 * s} 21.5V29.5M${5 * s} 21V28.5`}
+      {(poz === 'yumruk' || poz === 'isaret' || poz === 'cene') && (
+        <path d={poz === 'yumruk' ? 'M-4 21V29M1.5 21.5V29.5M7 21V28' : poz === 'cene' ? `M${2 * s} 21.5V29M${-1.5 * s} 21.5V29.5` : `M${-0.5 * s} 21.5V29.5M${5 * s} 21V28.5`}
           stroke={RENK.murekkep} strokeWidth="1.8" strokeLinecap="round" />
       )}
       {/* eldiven sırt dikişleri (çizgi film eldiveni) */}

@@ -90,11 +90,13 @@ export const ISARET_EDEN: Poz = {
 // ---------------------------------------------------------------- ek duygu pozları (§3)
 // Açılar önden bakış için hesaplandı (omuz/dirsek/bilek zinciri; uzuv boyları sabit).
 export const DUYGU_POZLARI: Partial<Record<Duygu, Poz>> = {
-  /** eli çenesinde, gözler yukarı */
+  /** eli çenesinde: dirsek dışarıda bükülü, işaret parmağı yanakta, başparmak çenenin altında; kafa ele doğru ~6° yatık.
+   *  İki kemikli çözüm: omuz (-30,-124), bilek (-34,-127), dirsek (-64,-82); el 195° (yukarı-içe),
+   *  işaret parmağı ucu sol yanakta (-31,-203), başparmak ucu çenenin altında (8,-162). Uzuv boyları sabit. */
   dusunceli: {
     ...AYAKTA.on,
-    sagKol: { omuz: 17, dirsek: -163, bilek: 0, el: 'yumruk' },
-    kafaEgim: -4,
+    sagKol: { omuz: 39.5, dirsek: 175, bilek: -19.6, el: 'cene', ayna: true },
+    kafaEgim: -6,
     atki: { a1: 0, a2: 0 },
   },
   /** kollar hafif açılır */
@@ -113,10 +115,11 @@ export const DUYGU_POZLARI: Partial<Record<Duygu, Poz>> = {
     solKol: { omuz: -45, dirsek: 79, bilek: -34, el: 'yumruk' },
     atki: { a1: 0, a2: 0 },
   },
-  /** yanağı ele dayalı, kafa ele doğru eğik */
+  /** yanak avuca dayalı (el ağzın yanında, ağzı kapatmaz), kafa ele doğru 8° yatık.
+   *  Açılar omuz (30,-124) → bilek (88,-156) çözümünden; avuç yanağın sağ altına değer. */
   sikilmis: {
     ...AYAKTA.on,
-    solKol: { omuz: -74, dirsek: -136, bilek: 20, el: 'acik', ayna: true },
+    solKol: { omuz: -67, dirsek: -105, bilek: -28, el: 'acik', ayna: true },
     kafaEgim: 8,
     atki: { a1: 0, a2: 0 },
   },

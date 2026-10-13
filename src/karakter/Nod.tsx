@@ -5,7 +5,7 @@ import {
   Tanimlar, El, Ayakkabi, AtkiSarili, AtkiOn, AtkiUcu, AtkiDugumArka, atkiUcNoktasi,
   type Gorunus, type ElPozu,
 } from './parcalar';
-import { YuzOzellikleri, YuzTonu, Ekler, type Duygu } from './yuz';
+import { YuzOzellikleri, YuzTonu, Ekler, bakisKafa, type Duygu } from './yuz';
 import { AYAKTA, DUYGU_POZLARI, type Poz, type Kol, type Bacak } from './poz';
 import { atkiSekli, atkiKaristir, atkiSalinim, type AtkiDurumAdi } from './atkiTepki';
 import { Ampul } from '../esyalar/Ampul';
@@ -93,11 +93,12 @@ const Kafa: React.FC<{
 }> = ({ id, yaw, duygu, onceki, t, kare, bak, agiz, ayna, arka }) => {
   const R = OLCU.kafaR;
   const sikis = 1 - 0.28 * Math.sin(Math.PI * t); // geçişte yüz hafifçe büzülüp açılır (kırpışma)
+  const [donus, egim] = bakisKafa(bak); // bakış yönüne kafa ~5° döner/eğilir
   const katman = (d: Duygu, op: number, key: string) =>
     op <= 0.001 ? null : (
       <g key={key} opacity={op}>
         {!arka && <g clipPath={`url(#${id}-kafa)`}><YuzTonu duygu={d} id={id} /></g>}
-        {!arka && <g clipPath={`url(#${id}-kafa)`}><g transform={`translate(0 2) scale(1.12 ${1.12 * sikis})`}><YuzOzellikleri duygu={d} id={id} yaw={yaw} bak={bak} agiz={agiz} /></g></g>}
+        {!arka && <g clipPath={`url(#${id}-kafa)`}><g transform={`translate(0 ${2 + egim}) scale(1.12 ${1.12 * sikis})`}><YuzOzellikleri duygu={d} id={id} yaw={yaw + donus} bak={bak} agiz={agiz} /></g></g>}
       </g>
     );
   const ek = (d: Duygu, op: number, key: string) =>

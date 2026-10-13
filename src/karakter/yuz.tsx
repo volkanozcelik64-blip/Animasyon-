@@ -1,5 +1,5 @@
 import React from 'react';
-import { RENK, OLCU, CIZGI, BAKIS_KAYMA, type Agiz, type Bakis } from './olculer';
+import { RENK, OLCU, CIZGI, BAKIS, type Agiz, type Bakis } from './olculer';
 
 /** Referanstaki 9 duygu. Ayrıca 'sakin': tam boy referanstaki varsayılan yüz. */
 export const DUYGULAR = [
@@ -57,21 +57,48 @@ const Kalp: React.FC<{ olcek?: number }> = ({ olcek = 1 }) => (
 
 // ---------------------------------------------------------------- 9 yüz
 /** Bir duygunun kaş/göz/ağız/yanak çizimi (kafa yerelinde, merkez 0,0). */
+/** Gözleri açık nokta olan duygular: bakışta göz bebeği kenara kadar kayar, aşağı bakışta göz kapağı iner. */
+const ACIK_GOZ: Duygu[] = ['sakin', 'notr', 'sasirmis', 'dusunceli', 'utangac', 'kafasi_karisik', 'heyecanli'];
+
 function yuzParcalari(d: Duygu, id: string, P: Yerlestir, bak: Bakis, agiz: Agiz): React.ReactNode[] {
   const [bx, by] = bakisKaymasi(bak);
-  // göz (g*) tam kayar, kaş/ağız/yanak yarısı kadar: önce göz bebekleri, sonra yüz
+  const acik = ACIK_GOZ.includes(d);
+  const kapak = bak === 'asagi' && acik;
+  // göz bebekleri (g*) göz alanının kenarına kadar kayar; kapalı/kalp gözler az kayar.
+  // Kafanın dönüşü/eğimi (yüzün tamamı) Nod.tsx'te yaw ve dikey kayma olarak eklenir.
+  const lid: React.ReactNode[] = [];
   const g = (ax: number, ay: number, el: React.ReactNode, k: string) => {
     if (k === 'a' && agiz !== 'kapali') return null;
-    const o = k[0] === 'g' ? 1 : 0.4;
-    return P(ax + bx * o, ay + by * o, el, k, ax === 0 ? 26 : 11);
+    if (k[0] === 'g') {
+      const o = acik ? 1 : 0.35;
+      if (kapak) lid.push(P(ax, ay, <GozKapagi />, `l${k}`, 11));
+      return P(ax + bx * o, ay + by * o, el, k, 11);
+    }
+    // yukarı bakınca kaşlar kalkar
+    const kas = k[0] === 'k' && bak === 'yukari' ? -BAKIS.kasKalkma : 0;
+    return P(ax, ay + kas, el, k, ax === 0 ? 26 : 11);
   };
-  const konusma = agiz !== 'kapali' ? [P(bx * 0.4, 31 + by * 0.4, <AgizSekli agiz={agiz} />, 'ka', 20)] : [];
-  return [...duyguYuzu(d, id, g), ...konusma];
+  const konusma = agiz !== 'kapali' ? [P(0, 31, <AgizSekli agiz={agiz} />, 'ka', 20)] : [];
+  return [...duyguYuzu(d, id, g), ...lid, ...konusma];
 }
 
+/** Aşağı bakışta inik göz kapağı: göz bebeğinin üst kısmını örter. (Göz yuvasının merkezine göre.) */
+const GozKapagi: React.FC = () => (
+  <g>
+    <path d="M-13 -12H13V4Q0 7 -13 4Z" fill="#fff" />
+    <path d="M-10 4Q0 7 10 4" {...cizgi(3.4)} />
+  </g>
+);
+
 export function bakisKaymasi(b: Bakis): [number, number] {
-  const k = BAKIS_KAYMA;
-  return b === 'sol' ? [-k, 0] : b === 'sag' ? [k, 0] : b === 'yukari' ? [0, -k] : b === 'asagi' ? [0, k] : [0, 0];
+  const k = BAKIS.gozBebegi, v = BAKIS.gozBebegiDikey;
+  return b === 'sol' ? [-k, 0] : b === 'sag' ? [k, 0] : b === 'yukari' ? [0, -v] : b === 'asagi' ? [0, v] : [0, 0];
+}
+
+/** Kafanın bakış yönüne dönüşü: [yaw ekleme (radyan), yüzün dikey kayması]. */
+export function bakisKafa(b: Bakis): [number, number] {
+  return b === 'sol' ? [-BAKIS.kafaDonus, 0] : b === 'sag' ? [BAKIS.kafaDonus, 0]
+    : b === 'yukari' ? [0, -BAKIS.kafaEgim] : b === 'asagi' ? [0, BAKIS.kafaEgim] : [0, 0];
 }
 
 // ---------------------------------------------------------------- konuşma ağızları (§8)
@@ -103,10 +130,12 @@ export const AgizSekli: React.FC<{ agiz: Agiz }> = ({ agiz }) => {
     case 'O':
       return <ellipse rx="8" ry="10" fill={RENK.agizIc} {...kontur} />;
     case 'U':
+      // öne büzülmüş dudak: O'dan dar ve küçük; pembe dudak halkası + küçük koyu iç + büzülme çizgileri
       return (
         <g>
-          <ellipse rx="5.5" ry="6" fill={RENK.agizIc} stroke={K} strokeWidth="3.8" />
-          <path d="M-8 -3Q-9 0 -8 3M8 -3Q9 0 8 3" stroke={K} strokeWidth="1.4" fill="none" strokeLinecap="round" />
+          <ellipse rx="6" ry="7.5" fill={RENK.dil} stroke={K} strokeWidth="3" />
+          <ellipse rx="2.2" ry="3.2" fill={RENK.agizIc} />
+          <path d="M-10.5 -2.5L-8 -1M-10.5 2.5L-8 1M10.5 -2.5L8 -1M10.5 2.5L8 1" stroke={K} strokeWidth="1.5" strokeLinecap="round" />
         </g>
       );
     case 'MBP':
@@ -134,11 +163,11 @@ function duyguYuzu(d: Duygu, id: string, g: (ax: number, ay: number, el: React.R
     case 'dusunceli':
       // gözler yukarı-yana, bir kaş hafif kalkık, ağız kenara çekik
       return [
-        g(-23, -24, <path d="M-9 2Q0 -2 9 1" {...cizgi(3.6)} />, 'k1'),
-        g(23, -29, <path d="M-9 3Q0 -5 9 0" {...cizgi(3.6)} />, 'k2'),
-        g(-19, -3, <ellipse rx="5" ry="6.5" fill={K} />, 'g1'),
-        g(25, -3, <ellipse rx="5" ry="6.5" fill={K} />, 'g2'),
-        g(6, 31, <path d="M-8 1Q0 0 8 -2" {...cizgi(3.4)} />, 'a'),
+        g(-23, -23, <path d="M-9 1Q0 -1 9 1" {...cizgi(3.6)} />, 'k1'),
+        g(24, -33, <path d="M-10 4Q-1 -7 10 -1" {...cizgi(3.6)} />, 'k2'),
+        g(-13, -9, <ellipse rx="5.5" ry="7" fill={K} />, 'g1'),
+        g(31, -9, <ellipse rx="5.5" ry="7" fill={K} />, 'g2'),
+        g(12, 31, <path d="M-6 1Q0 0.5 6 -2" {...cizgi(3.4)} />, 'a'),
       ];
     case 'sasirmis':
       // kaşlar yukarıda, büyük nokta gözler, O ağız (olumlu)

@@ -113,6 +113,12 @@ export const ATKI = {
 export const AGIZLAR = ['kapali', 'A', 'E', 'I', 'O', 'U', 'MBP', 'FV'] as const;
 export type Agiz = (typeof AGIZLAR)[number];
 
-/** Bakış yönü (§2): göz bebekleri bu kadar kayar, yüz bunun yarısı kadar. */
+/** Bakış yönü (§2): göz bebekleri göz alanının kenarına kadar kayar; kafa da o yöne ~5° döner/eğilir. */
 export type Bakis = 'sol' | 'sag' | 'yukari' | 'asagi' | 'izleyici';
-export const BAKIS_KAYMA = 7;
+export const BAKIS = {
+  gozBebegi: 14, // yatay göz bebeği kayması (eskisinin 2 katı)
+  gozBebegiDikey: 9, // dikey kayma (göz yuvası dikeyde daha dar)
+  kafaDonus: 0.09, // sol/sag: kafa dönüşü (radyan, ~5°) — yüz küre üstünde kayar
+  kafaEgim: 7, // yukari/asagi: yüzün yukarı/aşağı kayması (~5° eğim)
+  kasKalkma: 5, // yukari: kaşlar kalkar
+} as const;
