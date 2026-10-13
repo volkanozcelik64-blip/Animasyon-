@@ -3,6 +3,7 @@ import { AbsoluteFill, Audio, Composition, Sequence, continueRender, delayRender
 import * as Temel from './sahneler/NodTemel';
 import * as Konusma from './sahneler/NodKonusma';
 import * as Pil from './sahneler/NodPil';
+import * as Sarj1 from './sahneler/Sarj1';
 import { YAZI_AILESI, YAZI_DOSYASI } from './karakter/Balon';
 
 // balon yazı tipi (assets/fonts, public dizini assets): ilk kare çizilmeden önce yüklenir
@@ -49,8 +50,24 @@ const NodPil: React.FC = () => {
   );
 };
 
+/** "1% Battery" bölüm 1 (Sarj1). */
+const NodSarj1: React.FC = () => {
+  const kare = useCurrentFrame();
+  return (
+    <AbsoluteFill style={{ backgroundColor: '#ffffff' }}>
+      <Sarj1.Sahne kare={kare} />
+      {Sarj1.SESLER.map((s, i) => (
+        <Sequence key={i} from={s.kare} durationInFrames={60}>
+          <Audio src={staticFile(`sfx/${s.dosya}.wav`)} volume={s.ses ?? 1} />
+        </Sequence>
+      ))}
+    </AbsoluteFill>
+  );
+};
+
 export const Root: React.FC = () => (
   <>
+    <Composition id="Sarj1" component={NodSarj1} durationInFrames={Sarj1.SURE} fps={Sarj1.FPS} width={Sarj1.GENISLIK} height={Sarj1.YUKSEKLIK} />
     <Composition id="NodPil" component={NodPil} durationInFrames={Pil.SURE} fps={Pil.FPS} width={Pil.GENISLIK} height={Pil.YUKSEKLIK} />
     <Composition id="NodTemel" component={NodTemel} durationInFrames={Temel.SURE} fps={Temel.FPS} width={Temel.GENISLIK} height={Temel.YUKSEKLIK} />
     <Composition id="NodKonusma" component={NodKonusma} durationInFrames={Konusma.SURE} fps={Konusma.FPS} width={Konusma.GENISLIK} height={Konusma.YUKSEKLIK} />

@@ -9,10 +9,11 @@ import * as Temel from '../src/sahneler/NodTemel';
 import * as Konusma from '../src/sahneler/NodKonusma';
 import * as Pil from '../src/sahneler/NodPil';
 import * as Hazirlik from '../src/sahneler/pil/Hazirlik';
+import * as Sarj1 from '../src/sahneler/Sarj1';
 import { yaziCss } from './yazi';
 
 // SAHNE=konusma npx tsx scripts/kareler.tsx … → lip sync sahnesi
-const sahneler = { temel: Temel, konusma: Konusma, pil: Pil, hazirlik: Hazirlik } as const;
+const sahneler = { temel: Temel, konusma: Konusma, pil: Pil, hazirlik: Hazirlik, sarj1: Sarj1 } as const;
 const { Sahne, GENISLIK, YUKSEKLIK } = sahneler[(process.env.SAHNE as keyof typeof sahneler) ?? 'temel'] ?? Temel;
 
 const KOK = path.resolve(__dirname, '..');

@@ -11,7 +11,8 @@
     "ses:analiz": "tsx scripts/ses-analiz.ts",
     "seslendir": "NODE_USE_ENV_PROXY=1 tsx scripts/seslendir.ts",
     "render:pil": "remotion render src/index.ts NodPil video/nod-pil.mp4 --codec=h264 --browser-executable=/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell --public-dir=assets",
-    "sfx": "python3 scripts/sfx-uret.py"
+    "sfx": "python3 scripts/sfx-uret.py",
+    "render:sarj1": "remotion render src/index.ts Sarj1 video/sarj1.mp4 --codec=h264 --browser-executable=/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell --public-dir=assets"
   },
   "keywords": [],
   "author": "",

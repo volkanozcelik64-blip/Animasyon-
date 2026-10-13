@@ -17,6 +17,7 @@
 - Balon yazılırken Nod'un ağzı sessizce açılıp kapanır (`sessizAgiz`), baş sallamaları sürer. Balon yüzü kapatmaz; düşünce/fısıltı kuyruğu baş üstüne yönelir. Karanlıkta `karanlik` (siyah dolgu, beyaz kontur).
 - Ses efektleri sentezlenir: `npm run sfx` → `assets/sfx/*.wav`; sahne `SESLER` listesiyle `<Sequence><Audio/></Sequence>`.
 - Örnek: "1% Battery" `src/sahneler/NodPil.tsx` → `npm run render:pil` → `video/nod-pil.mp4` (35 sn, 1920×1080, 30 fps). Kontrol: `SAHNE=pil npm run kareler -- …`.
+- "1% Battery" 5 bölüm: ortak oda `src/sahneler/pil/Oda.tsx`; bölüm 1 `src/sahneler/Sarj1.tsx` → `npm run render:sarj1` → `video/sarj1.mp4`. Telefon: `src/esyalar/ModernTelefon.tsx` (9:19,5; durum çubuğu; ekranda Just Nod kanal sayfası, marka logosu yok).
 
 ## Pipeline (current): Mixamo + Blender, flat 2D cartoon look
 - Blender runs headless only: `blender -b -P script.py [-- args]` (Ubuntu package, Blender 4.0.2; EEVEE renders via Mesa software EGL).
