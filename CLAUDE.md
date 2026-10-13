@@ -1,5 +1,10 @@
 # Animasyon — project rules
 
+## Karakter (güncel): Nod — React/SVG
+- Referans: `assets/karakter-referans.png`. Tek kaynak `src/karakter/` (`Nod.tsx`, ölçü/renk `olculer.ts`); eşyalar `src/esyalar/`.
+- Eski karakter ve eski çizim kodu (Blender modeli, `*.html` videolar) KULLANILMAZ.
+- Önizleme PNG'leri: `npm run onizleme` → `onizleme/karakter/`. Her değişiklikten sonra PNG'leri açıp referansla karşılaştır.
+
 ## Pipeline (current): Mixamo + Blender, flat 2D cartoon look
 - Blender runs headless only: `blender -b -P script.py [-- args]` (Ubuntu package, Blender 4.0.2; EEVEE renders via Mesa software EGL).
 - `blender/build_nod.py` builds Nod and exports `nod_tpose.fbx`: T-pose, ONE joined mesh (<10k tris, no armature/animation/modifiers/extra objects), exactly 1.80 m, origin at the feet, facing -Y, metres; FBX written Y-up with `bake_space_transform=True` + `FBX_SCALE_UNITS` (no rotation on the FBX model node — otherwise Mixamo shows it huge/off-centre).
