@@ -19,6 +19,11 @@ fs.mkdirSync(CIKTI, { recursive: true });
 
 const refUri = `data:image/png;base64,${fs.readFileSync(REF).toString('base64')}`;
 const svg = (el: React.ReactElement) => renderToStaticMarkup(el);
+// referans görseli 2973x880: solda tam boy, sağda 9 duygu ızgarası
+const REF_W = 2973, REF_H = 880;
+const refKirp = (x: number, y: number, w: number, h: number, o = 1) =>
+  `<div style="width:${w * o}px;height:${h * o}px;overflow:hidden;position:relative">
+    <img src="${refUri}" style="position:absolute;left:${-x * o}px;top:${-y * o}px" width="${REF_W * o}" height="${REF_H * o}"></div>`;
 
 const sayfa = (govde: string, w: number, h: number) => `<!doctype html><html><head><meta charset="utf-8">
 <style>html,body{margin:0;background:#fff;font-family:'DejaVu Sans',sans-serif}
@@ -56,12 +61,11 @@ async function main() {
   await cek('duygular-izgara.png', izgara(18), ihW * 3 + 4, ihH * 3 + 4);
 
   // yan yana: referans | bizim
-  const refW = 1379, refH = 752;
   await cek('duygular-karsilastirma.png', `
     <div style="display:flex;gap:24px;padding:10px;align-items:flex-start">
-      <div><div class="baslik">Referans</div><img src="${refUri}" width="${refW}" height="${refH}"></div>
-      <div><div class="baslik">SVG bileşeni</div><div style="padding:${(refH - ihH * 3) / 2}px 0">${izgara(18)}</div></div>
-    </div>`, refW + ihW * 3 + 70, refH + 70);
+      <div><div class="baslik">Referans</div>${refKirp(1600, 95, 1300, 760)}</div>
+      <div><div class="baslik">SVG bileşeni</div>${izgara(18)}</div>
+    </div>`, 1300 + ihW * 3 + 70, 840);
 
   // ------------------------------------------------ 2) üç görünüş, tam boy
   const tamBoy = (poz: Poz, duygu: Duygu, ad: string, w = 360, ekstra?: React.ReactNode, on?: React.ReactNode) =>
@@ -73,20 +77,15 @@ async function main() {
       </svg>,
     );
   const gorunusler = `<div style="display:flex">${(['on', 'ucdort', 'yan'] as const).map((g, i) =>
-    `<div>${tamBoy(AYAKTA[g], 'mutlu', `g${i}`, 420)}<div class="etiket">${['ÖNDEN', '3/4 YAN', 'PROFİL'][i]}</div></div>`).join('')}</div>`;
+    `<div>${tamBoy(AYAKTA[g], 'sakin', `g${i}`, 420)}<div class="etiket">${['ÖNDEN', '3/4 YAN', 'PROFİL'][i]}</div></div>`).join('')}</div>`;
   await cek('gorunusler.png', gorunusler, 1260, 760);
 
-  // referans hücresi (mutlu) ile önden görünüşün üst kısmı yan yana
+  // referans tam boy | bizim önden (aynı boy ölçeğinde) + 3/4 + profil
   await cek('gorunusler-karsilastirma.png', `
     <div style="display:flex;gap:20px;padding:10px;align-items:flex-start">
-      <div><div class="baslik">Referans (mutlu hücresi)</div>
-        <div style="width:460px;height:250px;overflow:hidden;position:relative">
-          <img src="${refUri}" style="position:absolute;left:-60px;top:0" width="${refW}" height="${refH}"></div>
-        <div style="width:460px;height:250px;overflow:hidden;position:relative;margin-top:10px">
-          <img src="${refUri}" style="position:absolute;left:-60px;top:-245px" width="${refW}" height="${refH}"></div>
-      </div>
+      <div><div class="baslik">Referans (tam boy)</div><div style="padding-top:0px">${refKirp(610, 175, 270, 660, 1.08)}</div></div>
       <div><div class="baslik">SVG — önden / 3/4 / profil</div>${gorunusler}</div>
-    </div>`, 1780, 840);
+    </div>`, 1580, 800);
 
   // ------------------------------------------------ 3) dört poz
   const pozlar: [Poz, Duygu, string, React.ReactNode?, React.ReactNode?][] = [

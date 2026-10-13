@@ -10,13 +10,13 @@ export const Tanimlar: React.FC<{ id: string }> = ({ id }) => (
   <defs>
     <pattern id={`${id}-orgu`} width="5" height="5" patternUnits="userSpaceOnUse">
       <rect width="5" height="5" fill={RENK.atki} />
-      <path d="M0 4.6H5M4.6 0V5" stroke={RENK.atkiKoyu} strokeWidth="0.9" />
-      <circle cx="2.2" cy="2.2" r="0.9" fill={RENK.atkiAcik} opacity="0.7" />
+      <path d="M0 0.5L2.5 4.5L5 0.5" fill="none" stroke={RENK.atkiKoyu} strokeWidth="0.9" />
+      <path d="M0.9 0.6L2.5 3.1L4.1 0.6" fill="none" stroke={RENK.atkiAcik} strokeWidth="0.6" opacity="0.8" />
     </pattern>
-    <pattern id={`${id}-orguK`} width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(-28)">
+    <pattern id={`${id}-orguK`} width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(-62)">
       <rect width="5" height="5" fill={RENK.atki} />
-      <path d="M0 4.6H5M4.6 0V5" stroke={RENK.atkiKoyu} strokeWidth="0.9" />
-      <circle cx="2.2" cy="2.2" r="0.9" fill={RENK.atkiAcik} opacity="0.7" />
+      <path d="M0 0.5L2.5 4.5L5 0.5" fill="none" stroke={RENK.atkiKoyu} strokeWidth="0.9" />
+      <path d="M0.9 0.6L2.5 3.1L4.1 0.6" fill="none" stroke={RENK.atkiAcik} strokeWidth="0.6" opacity="0.8" />
     </pattern>
     <radialGradient id={`${id}-kizgin`} cx="0.5" cy="0.38" r="0.6">
       <stop offset="0" stopColor={RENK.kizginKirmizi} stopOpacity="0.85" />
@@ -59,12 +59,10 @@ function elParcalari(poz: ElPozu, s: number): Parca[] {
   const avuc: Parca = { t: 'c', x: 0, y: 15, r: 10.5, kat: 'birlesik' };
   switch (poz) {
     case 'acik':
+      // dinlenen el: parmaklar bitişik (eldiven), başparmak gövdeye dönük, araları çentikle ayrılır
       return [
-        { t: 'k', x1: -6, y1: 20, x2: -9, y2: 33, w: 7, kat: 'alt' },
-        { t: 'k', x1: 6, y1: 20, x2: 9, y2: 33, w: 7, kat: 'alt' },
-        { t: 'k', x1: 0, y1: 21, x2: 0, y2: 36, w: 7, kat: 'alt' },
-        avuc,
-        { t: 'k', x1: 6 * s, y1: 13, x2: 16 * s, y2: 19, w: 7, kat: 'birlesik' },
+        { t: 'k', x1: -1.5 * s, y1: 10, x2: -2 * s, y2: 25, w: 18.5, kat: 'birlesik' },
+        { t: 'k', x1: 7.5 * s, y1: 14, x2: 8.5 * s, y2: 24, w: 6.5, kat: 'ust' },
       ];
     case 'salla':
       return [
@@ -141,48 +139,39 @@ export const El: React.FC<{ poz: ElPozu; s?: number; nesne?: React.ReactNode }> 
           stroke={RENK.murekkep} strokeWidth="1.8" strokeLinecap="round" />
       )}
       {/* eldiven sırt dikişleri (çizgi film eldiveni) */}
-      {(poz === 'acik' || poz === 'salla') && (
+      {poz === 'salla' && (
         <path d="M-3 9V15M3 9V15" stroke={RENK.murekkep} strokeWidth="1.4" strokeLinecap="round" opacity="0.8" />
       )}
       {/* bileklik */}
-      <rect x="-9.5" y="-2" width="19" height="9" rx="3.5" fill={RENK.bileklik}
-        stroke={RENK.murekkep} strokeWidth="2.4" />
-      <path d="M-7 2.5H7" stroke={RENK.bileklikKoyu} strokeWidth="1.3" />
+      <rect x="-10" y="-3" width="20" height="10" rx="3" fill={RENK.bileklik}
+        stroke={RENK.murekkep} strokeWidth="2.6" />
+      <path d="M-7.5 -0.5H7.5" stroke="#8cc4f2" strokeWidth="1.6" strokeLinecap="round" />
     </g>
   );
 };
 
 // ---------------------------------------------------------------- ayakkabı
-// Ayak bileği (0,0). Zemin y=+12 (bilek yüksekliği). Yan görünüşte burun +x.
+// Yüksek bilekli spor ayakkabı. Ayak bileği (0,0), zemin y=-OLCU.bilekY (53).
+// s: burnun baktığı yön (+1 sağ / -1 sol). Önden bakışta burunlar dışa döner.
 export const Ayakkabi: React.FC<{ gorunus: Gorunus; s?: number }> = ({ gorunus, s = 1 }) => {
   const k = RENK.murekkep;
-  if (gorunus === 'on') {
-    return (
-      <g transform={`translate(${4 * s} 12) scale(1.3) translate(0 -12)`}>
-        <path d="M-13 7C-14 -3 -8 -7 0 -7C8 -7 14 -3 13 7Z" fill={RENK.ayakkabi} stroke={k} strokeWidth="3" strokeLinejoin="round" />
-        <path d="M-5 -4L5 -4M-6 -0.5L6 -0.5" stroke={RENK.beyaz} strokeWidth="1.8" strokeLinecap="round" />
-        <path d="M-10 4Q0 0.5 10 4" stroke={RENK.bileklik} strokeWidth="2.6" fill="none" strokeLinecap="round" />
-        <rect x="-15.5" y="5.5" width="31" height="6.5" rx="3" fill={RENK.taban} stroke={k} strokeWidth="2.8" />
-      </g>
-    );
-  }
-  const sx = gorunus === 'ucdort' ? 0.78 : 1;
+  const w = 3.6;
+  const sx = gorunus === 'ucdort' ? 0.9 : gorunus === 'yan' ? 1.08 : 1;
   return (
-    <g transform={`translate(0 12) scale(${1.35 * sx * s} 1.35) translate(-2 -12)`}>
+    <g transform={`translate(0 ${-OLCU.bilekY}) scale(${OLCU.ayakOlcek}) translate(0 ${OLCU.bilekY}) scale(${sx * s} 1)`} strokeLinejoin="round">
       {/* üst (saya) */}
-      <path d="M-13 -6L3 -7C8 -7 10 -2 17 -0.5C26 1 31 3 31 7.5L-14 7.5C-15 2 -15 -2 -13 -6Z"
-        fill={RENK.ayakkabi} stroke={k} strokeWidth="3" strokeLinejoin="round" />
-      {/* burun kapağı */}
-      <path d="M19 0.5C26 1.5 30 3.5 30 7L19 7Z" fill={RENK.ayakkabiAcik} />
+      <path d="M-17 10Q-18 3 -11 3L8 3Q14 3 14 9L15 25Q25 27 31 36L34 44L-18 44Z" fill={RENK.ayakkabi} stroke={k} strokeWidth={w} />
+      {/* topuk tarafı açık panel */}
+      <path d="M-15.5 12Q-15.5 8 -11 8L-3 8L-3 42L-16 42Z" fill={RENK.ayakkabiAcik} />
+      <circle cx="-9" cy="27" r="4.2" fill={RENK.ayakkabiNokta} stroke={k} strokeWidth="1.2" />
       {/* bağcıklar */}
-      <path d="M4 -5L8 -1M8 -6L11 -2.5M1 -3L5 0.5" stroke={RENK.beyaz} strokeWidth="1.7" strokeLinecap="round" />
-      {/* mavi yan detay */}
-      <path d="M-9 4Q4 6 21 1.5" stroke={RENK.bileklik} strokeWidth="2.8" fill="none" strokeLinecap="round" />
-      {/* topuk */}
-      <path d="M-13.5 -4.5Q-16 0 -14 5" stroke={RENK.bileklik} strokeWidth="2.2" fill="none" />
+      <path d="M3 14L12 12.5M4 20L13.5 18.5M5 26L16 25" stroke={RENK.bagcik} strokeWidth="3" strokeLinecap="round" />
+      {/* bilek yakası */}
+      <path d="M-14 -3Q-14 -7 -10 -7L7 -7Q11 -7 11 -3L11 8L-14 8Z" fill={RENK.ayakkabiYaka} stroke={k} strokeWidth={w} />
+      {/* beyaz burun */}
+      <path d="M3 27Q20 24 32 35Q38 42 34 46L0 46Q-3 35 3 27Z" fill={RENK.burun} stroke={k} strokeWidth={w} />
       {/* taban */}
-      <path d="M-15.5 6H31Q34 6 34 9V9.5Q34 12.5 31 12.5H-13Q-16 12.5 -16 9.5V8Q-16 6 -15.5 6Z"
-        fill={RENK.taban} stroke={k} strokeWidth="2.8" strokeLinejoin="round" />
+      <path d="M-19 43L33 43Q38 43 38 47.5Q38 53 32 53L-15 53Q-20 53 -20 48.5Q-20 43 -19 43Z" fill={RENK.taban} stroke={k} strokeWidth={w} />
     </g>
   );
 };

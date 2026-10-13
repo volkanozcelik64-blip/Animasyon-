@@ -20,14 +20,14 @@ export interface Poz {
   atki: { a1: number; a2: number };
 }
 
-const ON_SARKIK = 16;
+const ON_SARKIK = 13;
 
 export const AYAKTA: Record<Gorunus, Poz> = {
   on: {
     gorunus: 'on', kok: { x: 0, y: OLCU.kalcaY }, egim: 0, kafaEgim: 0,
     sagKol: { omuz: ON_SARKIK, dirsek: -3, bilek: 0, el: 'acik' },
     solKol: { omuz: -ON_SARKIK, dirsek: 3, bilek: 0, el: 'acik' },
-    sagBacak: { kalca: 4, diz: -4 }, solBacak: { kalca: -4, diz: 4 },
+    sagBacak: { kalca: 4.5, diz: 0 }, solBacak: { kalca: -4.5, diz: 0 },
     atki: { a1: -4, a2: 3 },
   },
   ucdort: {
@@ -49,17 +49,18 @@ export const AYAKTA: Record<Gorunus, Poz> = {
 /** Sandalyede yandan oturan (profil): dizler 90°, eller dizlerde. */
 export const OTURAN: Poz = {
   // kalça yüksekliği = alt bacak + bilek: baldır dik, ayak yerde
-  gorunus: 'yan', kok: { x: 0, y: -(OLCU.altBacak + -OLCU.bilekY) }, egim: -2, kafaEgim: 0,
+  // baldır 8° öne açık: topuk sandalyenin ön bacağından uzak kalır; kalça bu kadar alçalır ki ayak yerde olsun
+  gorunus: 'yan', kok: { x: 0, y: -(OLCU.altBacak * Math.cos((8 * Math.PI) / 180) - OLCU.bilekY) }, egim: -2, kafaEgim: 0,
   sagKol: { omuz: -15, dirsek: -27, bilek: -48, el: 'acik' },
   solKol: { omuz: -11, dirsek: -29, bilek: -50, el: 'acik' },
-  sagBacak: { kalca: -90, diz: 90 }, solBacak: { kalca: -88, diz: 88 },
+  sagBacak: { kalca: -90, diz: 82 }, solBacak: { kalca: -88, diz: 80 },
   atki: { a1: 2, a2: 2 },
 };
 
 /** El sallayan (önden): karakterin sol kolu havada. */
 export const EL_SALLAYAN: Poz = {
   ...AYAKTA.on,
-  solKol: { omuz: -122, dirsek: -50, bilek: -6, el: 'salla', ayna: true },
+  solKol: { omuz: -106, dirsek: -58, bilek: -4, el: 'salla', ayna: true },
   sagKol: { omuz: ON_SARKIK, dirsek: -3, bilek: 0, el: 'acik' },
   kafaEgim: 4,
   atki: { a1: -10, a2: 6 },

@@ -19,15 +19,15 @@ interface GorunusAyari {
 }
 
 const AYAR: Record<Gorunus, GorunusAyari> = {
-  on: { yaw: 0, govdeG: 32, omuzX: { sag: -25, sol: 25 }, kalcaX: { sag: -8, sol: 8 }, uzak: null },
-  ucdort: { yaw: 0.55, govdeG: 28, omuzX: { sag: -19, sol: 16 }, kalcaX: { sag: -5, sol: 6 }, uzak: 'sol' },
-  yan: { yaw: 0.92, govdeG: 24, omuzX: { sag: 1, sol: -3 }, kalcaX: { sag: 1, sol: -3 }, uzak: 'sol' },
+  on: { yaw: 0, govdeG: 46, omuzX: { sag: -30, sol: 30 }, kalcaX: { sag: -16, sol: 16 }, uzak: null },
+  ucdort: { yaw: 0.55, govdeG: 38, omuzX: { sag: -25, sol: 21 }, kalcaX: { sag: -13, sol: 11 }, uzak: 'sol' },
+  yan: { yaw: 0.92, govdeG: 30, omuzX: { sag: 1, sol: -4 }, kalcaX: { sag: 2, sol: -5 }, uzak: 'sol' },
 };
 
 // kalça merkezine göre yerel yükseklikler
-const BOYUN = OLCU.boyunY - OLCU.kalcaY; // -134
-const OMUZ = OLCU.omuzY - OLCU.kalcaY; // -120
-const KAFA = OLCU.kafaY - OLCU.kalcaY; // -212
+const BOYUN = OLCU.boyunY - OLCU.kalcaY;
+const OMUZ = OLCU.omuzY - OLCU.kalcaY;
+const KAFA = OLCU.kafaY - OLCU.kalcaY;
 
 export interface NodProps {
   poz?: Poz;
@@ -68,7 +68,7 @@ function KolCiz({ kol, x, s, katman, nesne }: { kol: Kol; x: number; s: number; 
       <g transform={`translate(0 ${OLCU.ustKol}) rotate(${kol.dirsek})`}>
         {tup && <Tup L={OLCU.onKol} w={OLCU.kolKalinlik} />}
         <g transform={`translate(0 ${OLCU.onKol}) rotate(${kol.bilek})`}>
-          {el && <g transform="scale(1.25)"><El poz={kol.el} s={kol.ayna ? -s : s} nesne={nesne} /></g>}
+          {el && <g transform={`scale(${OLCU.elOlcek})`}><El poz={kol.el} s={kol.ayna ? -s : s} nesne={nesne} /></g>}
         </g>
       </g>
     </g>
@@ -130,7 +130,7 @@ export const Nod: React.FC<NodProps> = (p) => {
   const poz: Poz = p.el ? { ...temel, sagKol: { ...temel.sagKol, el: p.el }, solKol: { ...temel.solKol, el: p.el } } : temel;
   const g = poz.gorunus;
   const A = AYAR[g];
-  const duygu = p.duygu ?? 'notr';
+  const duygu = p.duygu ?? 'sakin';
   const t = p.gecis ?? 1;
   const kare = p.kare ?? 0;
   const [ux, uy] = atkiUcNoktasi(g);
@@ -159,7 +159,7 @@ export const Nod: React.FC<NodProps> = (p) => {
     <g transform={`translate(${p.x ?? 0} ${p.y ?? 0}) scale(${(p.olcek ?? 1) * (p.bak === 'sol' ? -1 : 1)} ${p.olcek ?? 1})`}>
       <Tanimlar id={id} />
       {(p.golge ?? true) && (
-        <ellipse cx={poz.kok.x + (g === 'yan' ? 8 : 0)} cy="2" rx={g === 'yan' ? 50 : 56} ry="9" fill={RENK.golge} />
+        <ellipse cx={poz.kok.x + (g === 'yan' ? 10 : 0)} cy="2" rx={g === 'yan' ? 62 : 70} ry="8" fill={RENK.golge} />
       )}
       <g transform={`translate(${poz.kok.x} ${poz.kok.y})`}>
         {/* arka taraf */}
@@ -170,7 +170,7 @@ export const Nod: React.FC<NodProps> = (p) => {
         <g transform={`rotate(${poz.egim})`}>
           {/* gövde paneli: atkının altından kalçaya */}
           <path
-            d={`M${-govdeYari} ${BOYUN + 6}L${govdeYari} ${BOYUN + 6}L${govdeYari - 1} 4Q${govdeYari - 1} 7 ${govdeYari - 4} 7L${-govdeYari + 4} 7Q${-govdeYari + 1} 7 ${-govdeYari + 1} 4Z`}
+            d={`M${-govdeYari} ${BOYUN + 6}L${govdeYari} ${BOYUN + 6}L${govdeYari - 1} -6Q${govdeYari - 1} 6 ${govdeYari - 13} 6L${-govdeYari + 13} 6Q${-govdeYari + 1} 6 ${-govdeYari + 1} -6Z`}
             fill={RENK.beyaz} stroke={RENK.murekkep} strokeWidth={OLCU.kontur} strokeLinejoin="round" />
           {/* kollar (borular atkının arkasında) */}
           {yakin.map((tf) => kol(tf, 'tup'))}

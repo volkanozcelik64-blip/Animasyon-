@@ -1,12 +1,13 @@
 import React from 'react';
 import { RENK, OLCU } from './olculer';
 
+/** Referanstaki 9 duygu. Ayrıca 'sakin': tam boy referanstaki varsayılan yüz. */
 export const DUYGULAR = [
   'mutlu', 'notr', 'heyecanli',
   'uzgun', 'kizgin', 'korkmus',
   'kafasi_karisik', 'uykulu', 'asik',
 ] as const;
-export type Duygu = (typeof DUYGULAR)[number];
+export type Duygu = (typeof DUYGULAR)[number] | 'sakin';
 
 const R = OLCU.kafaR;
 const K = RENK.murekkep;
@@ -57,6 +58,15 @@ const Kalp: React.FC<{ olcek?: number }> = ({ olcek = 1 }) => (
 function yuzParcalari(d: Duygu, id: string, P: Yerlestir): React.ReactNode[] {
   const g = (ax: number, ay: number, el: React.ReactNode, k: string) => P(ax, ay, el, k, ax === 0 ? 26 : 11);
   switch (d) {
+    case 'sakin':
+      // tam boy referans: ince kavisli kaşlar, dikey oval gözler, hafif gülümseme
+      return [
+        g(-22, -18, <path d="M-9 2Q0 -3 9 1" {...cizgi(4)} />, 'k1'),
+        g(22, -18, <path d="M-9 1Q0 -3 9 2" {...cizgi(4)} />, 'k2'),
+        g(-21, 6, <ellipse rx="7" ry="9.5" fill={K} />, 'g1'),
+        g(21, 6, <ellipse rx="7" ry="9.5" fill={K} />, 'g2'),
+        g(0, 31, <path d="M-16 -1Q0 7 16 -1" {...cizgi(3.8)} />, 'a'),
+      ];
     case 'mutlu':
       return [
         g(-27, -30, <path d="M-10 3Q0 -6 10 3" {...cizgi(3.6)} />, 'k1'),
