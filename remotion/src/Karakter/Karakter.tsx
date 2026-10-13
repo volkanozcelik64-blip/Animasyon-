@@ -1,4 +1,6 @@
 import React, {useId} from 'react';
+import {Easing, useCurrentFrame, useVideoConfig} from 'remotion';
+import {bacakIK, kirpmaDegeri, nefes, sinirla} from './hareket';
 import {DUYGULAR, Duygu, Ekstra, GEO, Poz, Yuz as YuzTanimi, karistirPoz} from './pozlar';
 
 // Stil: siyah el çizimi kontur, beyaz dolgu, yanakta hafif pembe.
@@ -16,10 +18,20 @@ export type KarakterProps = {
   gecis?: number;
   /** Duygunun pozunun üstüne yazılan açılar (yürüme, el sallama vb.). */
   poz?: Partial<Poz>;
-  /** Göz kırpma 0 (açık) .. 1 (kapalı). */
+  /** Ek göz kırpma 0 (açık) .. 1 (kapalı); idle kırpmalarının üstüne eklenir. */
   kirpma?: number;
-  /** Kare sayısı: pırıltı, zzz, buhar gibi süslerin kendi küçük hareketleri için. */
+  /** Kare sayısı (varsayılan: useCurrentFrame). Nefes, kırpma ve süs hareketleri buna bağlıdır. */
   zaman?: number;
+  /** Sürekli idle: nefes alma + 3–5 sn'de bir rastgele göz kırpma. */
+  idle?: boolean;
+  /** Kırpma zamanlamasının tohumu (aynı sahnede birden çok karakter farklı kırpsın). */
+  tohum?: string;
+  /** Gövdenin yatay konumu (viewBox birimi). Ayak hedefleri dünya koordinatında kalır. */
+  govdeX?: number;
+  /** Squash & stretch: + uzama, − basılma (gövde hacmi korunur, kafa yarı oranda). */
+  ezilme?: number;
+  /** Verilirse bacaklar IK ile bu yer noktalarına basar (viewBox koordinatı) → ayak kaymaz. */
+  ayaklar?: {sol: {x: number; y: number}; sag: {x: number; y: number}};
   /** El çizimi titrek çizgi (SVG displacement). */
   elCizimi?: boolean;
   width?: number | string;
@@ -161,22 +173,32 @@ const Goz: React.FC<{tip: YuzTanimi['goz']; x: number; bx: number; by: number; k
   }
 };
 
-const Kas: React.FC<{tip: YuzTanimi['kas']}> = ({tip}) => {
-  // sol kaş için yol; sağ kaş aynası (x → -x)
-  const yollar: Record<YuzTanimi['kas'], [string, string] | null> = {
-    yok: null,
-    endiseli: ['M-25 -14 Q-18 -17 -10 -21', 'M25 -14 Q18 -17 10 -21'],
-    cokEndiseli: ['M-26 -12 Q-18 -15 -9 -23', 'M26 -12 Q18 -15 9 -23'],
-    kizgin: ['M-27 -22 Q-18 -18 -8 -12', 'M27 -22 Q18 -18 8 -12'],
-    kalkik: ['M-25 -18 Q-17 -26 -9 -19', 'M25 -18 Q17 -26 9 -19'],
-    tekKalkik: ['M-25 -15 Q-17 -17 -9 -15', 'M25 -21 Q17 -28 9 -20'],
-  };
-  const y = yollar[tip];
-  if (!y) return null;
+// Kaşlar sayısal tanımlıdır: [x0, y0, kontrolX, kontrolY, x1, y1] (sol, sağ) → iki duygu arasında
+// biçim olarak yumuşakça dönüşür (morph), sadece solup belirmez.
+type KasEgri = [number, number, number, number, number, number];
+const KASLAR: Record<YuzTanimi['kas'], [KasEgri, KasEgri, number]> = {
+  yok: [[-24, -17, -17, -19, -10, -17], [24, -17, 17, -19, 10, -17], 0],
+  endiseli: [[-25, -14, -18, -17, -10, -21], [25, -14, 18, -17, 10, -21], 1],
+  cokEndiseli: [[-26, -12, -18, -15, -9, -23], [26, -12, 18, -15, 9, -23], 1],
+  kizgin: [[-27, -22, -18, -18, -8, -12], [27, -22, 18, -18, 8, -12], 1],
+  kalkik: [[-25, -18, -17, -26, -9, -19], [25, -18, 17, -26, 9, -19], 1],
+  tekKalkik: [[-25, -15, -17, -17, -9, -15], [25, -21, 17, -28, 9, -20], 1],
+};
+
+const egri = (e: KasEgri) => `M${p(e[0])} ${p(e[1])} Q${p(e[2])} ${p(e[3])} ${p(e[4])} ${p(e[5])}`;
+const karistirEgri = (a: KasEgri, b: KasEgri, t: number) => a.map((v, i) => v + (b[i] - v) * t) as KasEgri;
+
+const Kaslar: React.FC<{once?: YuzTanimi['kas']; simdi: YuzTanimi['kas']; t: number}> = ({once, simdi, t}) => {
+  const b = KASLAR[simdi];
+  const a = KASLAR[once ?? simdi];
+  const sol = karistirEgri(a[0], b[0], t);
+  const sag = karistirEgri(a[1], b[1], t);
+  const opak = a[2] + (b[2] - a[2]) * t;
+  if (opak <= 0.01) return null;
   return (
-    <g className="kaslar" fill="none" strokeWidth={2.6}>
-      <path d={y[0]} />
-      <path d={y[1]} />
+    <g className="kaslar" fill="none" strokeWidth={2.6} opacity={opak}>
+      <path d={egri(sol)} />
+      <path d={egri(sag)} />
     </g>
   );
 };
@@ -405,34 +427,106 @@ const Ekstralar: React.FC<{liste: Ekstra[]; t: number}> = ({liste, t}) => {
   );
 };
 
-/** Bir duygunun yüz katmanı (kafa merkezine göre). */
-const YuzKatmani: React.FC<{yuz: YuzTanimi; poz: Poz; kirpma: number; t: number; id: string; opak: number}> = ({
-  yuz,
-  poz,
-  kirpma,
-  t,
-  id,
-  opak,
-}) => {
+/** Bir duygunun renk/yanak/süs katmanı (kafa merkezine göre). */
+const SusKatmani: React.FC<{yuz: YuzTanimi; t: number; id: string; opak: number}> = ({yuz, t, id, opak}) => {
   if (opak <= 0.001) return null;
   return (
-    <g className="yuz" opacity={opak}>
+    <g className="yuz-renk" opacity={opak}>
       <YuzRengi renk={yuz.renk} id={id} />
       <Yanaklar opak={yuz.yanak} id={id} tarama={yuz.ekstralar.includes('tarama')} />
-      <g className="gozler">
-        <Goz tip={yuz.goz} x={-17} bx={poz.bakisX} by={poz.bakisY} kirpma={kirpma} ayna={false} />
-        <Goz tip={yuz.goz} x={17} bx={poz.bakisX} by={poz.bakisY} kirpma={kirpma} ayna />
-      </g>
-      <Kas tip={yuz.kas} />
-      <g className="agiz">
-        <Agiz tip={yuz.agiz} />
-      </g>
-      <Ekstralar liste={yuz.ekstralar} t={t} />
     </g>
   );
 };
 
+const GozCifti: React.FC<{yuz: YuzTanimi; poz: Poz; kirpma: number; opak: number}> = ({yuz, poz, kirpma, opak}) => {
+  if (opak <= 0.001) return null;
+  return (
+    <g className="gozler" opacity={opak}>
+      <Goz tip={yuz.goz} x={-17} bx={poz.bakisX} by={poz.bakisY} kirpma={kirpma} ayna={false} />
+      <Goz tip={yuz.goz} x={17} bx={poz.bakisX} by={poz.bakisY} kirpma={kirpma} ayna />
+    </g>
+  );
+};
+
+const AgizKatmani: React.FC<{yuz: YuzTanimi; opak: number; olcek: number}> = ({yuz, opak, olcek}) => {
+  if (opak <= 0.001) return null;
+  return (
+    <g className="agiz" opacity={opak} transform={`translate(0 24) scale(${p(olcek)} ${p(0.6 + 0.4 * olcek)}) translate(0 -24)`}>
+      <Agiz tip={yuz.agiz} />
+    </g>
+  );
+};
+
+const yumusak = (a: number, b: number, x: number) => {
+  const t = sinirla((x - a) / (b - a));
+  return t * t * (3 - 2 * t);
+};
+
+/**
+ * Yüz: iki duygu arasında özellik özellik geçiş.
+ *  - kaşlar biçim olarak dönüşür (morph)
+ *  - gözler geçişin ortasında bir göz kırpmasının arkasında değişir
+ *  - ağız küçülerek söner, yenisi büyüyerek belirir
+ *  - yüz rengi, yanaklar ve süsler yumuşakça çapraz geçer
+ */
+const Yuz: React.FC<{once?: YuzTanimi; simdi: YuzTanimi; g: number; poz: Poz; kirpma: number; t: number; id: string}> = ({
+  once,
+  simdi,
+  g,
+  poz,
+  kirpma,
+  t,
+  id,
+}) => {
+  const gecisKirpma = once ? Easing.out(Easing.quad)(sinirla(1 - Math.abs(g - 0.5) / 0.3)) : 0;
+  const k = Math.max(kirpma, gecisKirpma);
+  const gozYeni = once ? yumusak(0.42, 0.58, g) : 1;
+  const agizEski = once ? 1 - yumusak(0.15, 0.55, g) : 0;
+  const agizYeni = once ? yumusak(0.45, 0.85, g) : 1;
+  const susYeni = once ? yumusak(0, 1, g) : 1;
+  const ekstraOlcek = 0.7 + 0.3 * susYeni;
+  return (
+    <g className="yuz">
+      {once && <SusKatmani yuz={once} t={t} id={id} opak={1 - susYeni} />}
+      <SusKatmani yuz={simdi} t={t} id={id} opak={susYeni} />
+      {once && <GozCifti yuz={once} poz={poz} kirpma={k} opak={1 - gozYeni} />}
+      <GozCifti yuz={simdi} poz={poz} kirpma={k} opak={gozYeni} />
+      <Kaslar once={once?.kas} simdi={simdi.kas} t={once ? g : 1} />
+      {once && <AgizKatmani yuz={once} opak={agizEski} olcek={0.75 + 0.25 * agizEski} />}
+      <AgizKatmani yuz={simdi} opak={agizYeni} olcek={0.75 + 0.25 * agizYeni} />
+      {once && (
+        <g opacity={1 - susYeni}>
+          <Ekstralar liste={once.ekstralar} t={t} />
+        </g>
+      )}
+      <g opacity={susYeni} transform={`scale(${p(ekstraOlcek)})`}>
+        <Ekstralar liste={simdi.ekstralar} t={t} />
+      </g>
+    </g>
+  );
+};
+
+/** IK ile çizilen bacak: kalça → diz → bilek, ayak dışa bakan kısa çizgi. */
+const IKBacak: React.FC<{taraf: 'sol' | 'sag'; kalca: {x: number; y: number}; ayak: {x: number; y: number}}> = ({
+  taraf,
+  kalca,
+  ayak,
+}) => {
+  const dis = taraf === 'sol' ? -1 : 1;
+  const bilek = {x: ayak.x, y: ayak.y - 3};
+  const {diz, ayak: uc} = bacakIK(kalca, bilek, GEO.uyluk, GEO.baldir, dis);
+  return (
+    <path
+      className={`bacak bacak-${taraf}`}
+      d={`M${p(kalca.x)} ${p(kalca.y)} L${p(diz.x)} ${p(diz.y)} L${p(uc.x)} ${p(uc.y)} q${-2 * -dis} 3 ${8 * dis} 3`}
+      fill="none"
+    />
+  );
+};
+
 // ───────────────────────────── karakter ─────────────────────────────
+
+const PELVIS = {x: 120, y: 198};
 
 export const Karakter: React.FC<KarakterProps> = ({
   duygu,
@@ -440,23 +534,48 @@ export const Karakter: React.FC<KarakterProps> = ({
   gecis = 1,
   poz: pozEk,
   kirpma = 0,
-  zaman = 0,
+  zaman,
+  idle = true,
+  tohum = 'karakter',
+  govdeX = 0,
+  ezilme = 0,
+  ayaklar,
   elCizimi = true,
   width,
   height,
   style,
 }) => {
   const id = 'k' + useId().replace(/[^a-zA-Z0-9]/g, '');
+  const kare = useCurrentFrame();
+  const {fps} = useVideoConfig();
+  const f = zaman ?? kare;
+
   const simdi = DUYGULAR[duygu];
-  const once = onceki ? DUYGULAR[onceki] : undefined;
-  const g = once ? Math.max(0, Math.min(1, gecis)) : 1;
+  const once = onceki && onceki !== duygu ? DUYGULAR[onceki] : undefined;
+  const g = once ? sinirla(gecis) : 1;
   const tabanPoz = once ? karistirPoz(once.poz, simdi.poz, g) : simdi.poz;
   const poz: Poz = {...tabanPoz, ...pozEk};
+
+  // idle: nefes (gövde hafifçe uzar, omuzlar/kafa kalkar, kollar gecikmeli sallanır) + rastgele kırpma
+  const nf = idle ? nefes(f, fps) : {deger: 0, kol: 0};
+  const kirp = Math.max(kirpma, idle ? kirpmaDegeri(f, fps, tohum) : 0);
+  const kolNefes = nf.kol * 1.6;
+  const kolSol: [number, number] = [poz.kolSol[0] + kolNefes, poz.kolSol[1] - kolNefes * 0.5];
+  const kolSag: [number, number] = [poz.kolSag[0] + kolNefes, poz.kolSag[1] - kolNefes * 0.5];
+
+  // squash & stretch hacmi koruyarak: sy·sx ≈ 1
+  const sy = (1 + ezilme) * (1 + 0.022 * nf.deger);
+  const sx = 1 / Math.sqrt(1 + ezilme);
+  const govdeBoy = PELVIS.y - 122;
+  const kafaKay = -(govdeBoy * (sy - 1)); // gövde uzarsa kafa yükselir
+  const omuzKay = -((PELVIS.y - GEO.omuzSol.y) * (sy - 1));
+  const kafaSx = 1 + (sx - 1) * 0.5;
+  const kafaSy = 1 + (sy - 1) * 0.5;
 
   const {kafa} = GEO;
   const boyun = {x: 120, y: 124};
   const zipla = poz.ziplama;
-  const golgeVar = simdi.yuz.ekstralar.includes('golge') || once?.yuz.ekstralar.includes('golge') || zipla > 1;
+  const golgeVar = simdi.yuz.ekstralar.includes('golge') || once?.yuz.ekstralar.includes('golge') || zipla > 1 || !!ayaklar;
   const golgeOlcek = Math.max(0.45, 1 - Math.max(0, zipla) / 90);
 
   return (
@@ -492,12 +611,12 @@ export const Karakter: React.FC<KarakterProps> = ({
       {golgeVar && (
         <ellipse
           className="golge"
-          cx={120}
-          cy={GEO.zemin + 4}
-          rx={30 * golgeOlcek}
+          cx={120 + govdeX}
+          cy={GEO.zemin + 2}
+          rx={34 * golgeOlcek}
           ry={5 * golgeOlcek}
           fill="#000"
-          opacity={0.12}
+          opacity={0.12 * golgeOlcek}
         />
       )}
 
@@ -509,22 +628,38 @@ export const Karakter: React.FC<KarakterProps> = ({
         strokeLinejoin="round"
         fill="none"
       >
-        <g className="karakter" transform={`translate(0 ${p(-zipla)}) rotate(${p(poz.govdeEgim)} 120 ${GEO.zemin})`}>
+        <g className="karakter" transform={`translate(${p(govdeX)} ${p(-zipla)})`}>
           <g className="bacaklar">
-            <Bacak taraf="sol" aci={poz.bacakSol} />
-            <Bacak taraf="sag" aci={poz.bacakSag} />
+            {ayaklar ? (
+              <>
+                <IKBacak taraf="sol" kalca={GEO.kalcaSol} ayak={{x: ayaklar.sol.x - govdeX, y: ayaklar.sol.y + zipla}} />
+                <IKBacak taraf="sag" kalca={GEO.kalcaSag} ayak={{x: ayaklar.sag.x - govdeX, y: ayaklar.sag.y + zipla}} />
+              </>
+            ) : (
+              <>
+                <Bacak taraf="sol" aci={poz.bacakSol} />
+                <Bacak taraf="sag" aci={poz.bacakSag} />
+              </>
+            )}
           </g>
-          <Govde />
-          <g className="kafa" transform={`rotate(${p(poz.kafaEgim)} ${boyun.x} ${boyun.y})`}>
-            <circle cx={kafa.x} cy={kafa.y} r={kafa.r} fill={BEYAZ} />
-            <g transform={`translate(${kafa.x} ${kafa.y})`}>
-              {once && <YuzKatmani yuz={once.yuz} poz={poz} kirpma={kirpma} t={zaman} id={id} opak={1 - g} />}
-              <YuzKatmani yuz={simdi.yuz} poz={poz} kirpma={kirpma} t={zaman} id={id} opak={g} />
+          <g className="ust-govde" transform={`rotate(${p(poz.govdeEgim)} ${PELVIS.x} ${PELVIS.y})`}>
+            <g transform={`translate(${PELVIS.x} ${PELVIS.y}) scale(${p(sx)} ${p(sy)}) translate(${-PELVIS.x} ${-PELVIS.y})`}>
+              <Govde />
             </g>
-          </g>
-          <g className="kollar">
-            <Kol taraf="sol" aci={poz.kolSol} />
-            <Kol taraf="sag" aci={poz.kolSag} />
+            <g className="kafa" transform={`translate(0 ${p(kafaKay)}) rotate(${p(poz.kafaEgim)} ${boyun.x} ${boyun.y})`}>
+              <g transform={`translate(${kafa.x} ${kafa.y}) scale(${p(kafaSx)} ${p(kafaSy)})`}>
+                <circle cx={0} cy={0} r={kafa.r} fill={BEYAZ} />
+                <Yuz once={once?.yuz} simdi={simdi.yuz} g={g} poz={poz} kirpma={kirp} t={f} id={id} />
+              </g>
+            </g>
+            <g className="kollar" transform={`translate(0 ${p(omuzKay)})`}>
+              <g transform={`translate(${p((GEO.omuzSol.x - PELVIS.x) * (sx - 1))} 0)`}>
+                <Kol taraf="sol" aci={kolSol} />
+              </g>
+              <g transform={`translate(${p((GEO.omuzSag.x - PELVIS.x) * (sx - 1))} 0)`}>
+                <Kol taraf="sag" aci={kolSag} />
+              </g>
+            </g>
           </g>
         </g>
       </g>

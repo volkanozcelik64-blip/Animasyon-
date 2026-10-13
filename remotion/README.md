@@ -20,7 +20,23 @@ import {Karakter} from './src/Karakter/Karakter';
 - **Poz:** `poz` prop'u duygunun pozunun üstüne yazar (`kolSol: [omuz, dirsek]`, `bacakSag: [kalça, diz]`,
   `kafaEgim`, `govdeEgim`, `ziplama`, `bakisX/Y`). `kolIK('sag', x, y)` eli bir noktaya götürür.
 - **Geçiş:** `onceki` + `gecis` (0→1): açılar karışır, yüzler çapraz geçer — sert değişim yok.
-- `kirpma` (0..1) göz kırpma, `zaman` (kare) pırıltı/zzz/gözyaşı gibi süslerin kendi hareketi.
+- **Idle (varsayılan açık):** hafif nefes (gövde uzar, omuz/kafa kalkar, kollar gecikmeli sallanır) ve
+  `tohum`'a göre 3–5 sn'de bir rastgele göz kırpma (ara sıra çift). `idle={false}` ile kapatılır.
+- **Squash & stretch:** `ezilme` (+ uzama, − basılma); gövde hacmi korunur, kafa yarı oranda deforme olur.
+- **Ayaklar yere kilitli:** `ayaklar={{sol: {x, y}, sag: {x, y}}}` verilirse bacaklar 2 kemikli IK ile
+  bu noktalara basar; gövde `govdeX` ve `poz.ziplama` ile hareket ederken ayak yerinde kalır.
+- **Yüz geçişi:** kaşlar biçim olarak dönüşür, gözler geçişin ortasında bir kırpmanın arkasında değişir,
+  ağız küçülerek söner/büyüyerek belirir, yüz rengi ve süsler çapraz geçer.
+- `kirpma` (0..1) ek göz kırpma; `zaman` varsayılan olarak `useCurrentFrame()`.
+
+### Hareket yardımcıları (`src/Karakter/hareket.ts`)
+
+- `yayToplami(anahtarlar, f, fps)` — her anahtar kendi `spring()`'ini başlatır, değişimler toplanır:
+  önceki yay bitmeden yeni hedef gelse de değer süreklidir (pop yok), yaylar hafif aşıp oturur.
+- `ziplamaEgrisi(t, fps, {hazirlik, havada, yukseklik, cokme})` — çömelme (anticipation, basılma) →
+  kalkışta uzama → parabolik (kavisli) uçuş → inişte darbe yayı ile basılma ve toparlanma.
+- `bacakIK`, `kalcaYuksekligi` — diz dışa kırılan bacak IK'sı ve ayakların izin verdiği en yüksek kalça.
+- `kirpmaDegeri`, `nefes` — idle; `takipci` — gecikmeli ikinci derece yay (follow-through).
 
 ## Çalıştırma
 
@@ -34,8 +50,11 @@ npm run galeri                       # out/duygu-galerisi.png (tüm duygular)
 Bulut ortamında Remotion'un kendi Chrome'unu indirmek yerine:
 `--browser-executable=/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell`.
 
-Test videosu (`DuyguTesti`): karakter mutlu yürüyerek girer ve sevinçle zıplar → düşünceli
-(çeneye el, düşünce balonu) → ampul yanar → heyecanlı zıplar. Hazır çıktı: `video/duygu-testi.mp4`.
+Test videosu (`DuyguTesti`, hazır çıktı `video/duygu-testi.mp4`): mutlu yan adımlarla girer (ayaklar
+kaymaz) → çömelip sevinçle zıplar, inişte basılır → hafif kalkıp tabureye oturur, düşünceli olur
+(çeneye el, düşünce balonu) → fikir! ampul yanar, heyecanlı olur → öne basılıp kalkar → iki heyecanlı
+zıplama. Kollar ve kafa gecikmeli bir yay takipçisiyle izler; gövdenin düşüş hızı kollara sürüklenme
+olarak geçer. Hiçbir hareket doğrusal değildir (spring / easing).
 
 Yazı tipi: Patrick Hand (SIL Open Font License), `public/` içinde.
 
