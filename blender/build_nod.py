@@ -1,4 +1,4 @@
-"""Build a simple 3D Nod in a clean humanoid T-pose and export it for Mixamo's auto-rigger.
+"""Build the new 3D Nod (black ball head, white eyes, stick body, red scarf) in a clean humanoid T-pose and export it for Mixamo's auto-rigger.
 
 Run:  blender -b -P blender/build_nod.py
 Out:  nod_tpose.fbx (repo root)  +  blender/nod_tpose.blend
@@ -7,9 +7,10 @@ Mixamo requirements met here (and asserted at the end):
   * real-world scale: exactly 1.80 m tall, metres, origin at the feet (0,0,0), all transforms applied
   * faces the front (-Y in Blender); FBX is written Y-up with the axis change BAKED into the vertices
     (no rotation on the FBX model node, which is what made Mixamo show it huge and off-centre)
-  * clean T-pose: arms straight out at shoulder height, flat mitten palms facing down, legs apart,
+  * clean T-pose: stick arms straight out at shoulder height, small round hands, legs apart,
     clear gaps between arms/torso and between the legs
-  * scarf hugs the neck; its short tails lie flat on the chest inside the torso silhouette
+  * scarf hugs the neck; its two tails lie flat on the chest inside the torso silhouette (no flapping
+    geometry for the auto-rigger; the backpack is NOT part of this mesh)
   * ONE joined mesh, no armature, no animation, no modifiers, no other objects, < 10k triangles
 """
 import bpy, bmesh, math, os
@@ -35,8 +36,7 @@ def mat(name, hexcol):
     return m
 
 MAT = {k: mat(n, c) for k, n, c in [
-    ('body', 'Nod_White', '#ffffff'), ('ink', 'Nod_Ink', '#1b1a18'), ('eyewhite', 'Nod_EyeWhite', '#ffffff'),
-    ('iris', 'Nod_Iris', '#7a4a26'), ('mouth', 'Nod_Mouth', '#7b1e25'), ('tongue', 'Nod_Tongue', '#ef7f8d'),
+    ('body', 'Nod_Black', '#1d1d20'), ('head', 'Nod_Head', '#2a2a2e'), ('eye', 'Nod_Eye', '#fbfbf4'),
     ('scarf', 'Nod_Scarf', '#d9362f'), ('scarfdark', 'Nod_ScarfDark', '#a32420')]}
 
 PARTS = []
@@ -89,59 +89,57 @@ def torus(name, c, R, r, material, seg=24, sides=8, ry=.86):
     return new_obj(name, bm, material)
 
 # ---------- proportions (metres, before the final exact-height normalisation) ----------
-HEAD_C, HEAD_R = Vector((0, 0, 1.45)), 0.35
-SH_Z = 1.00                       # shoulder / arm height
+# New Nod (design/character-sheet.png): big matte-black ball head, two white eyes with the top inner corner
+# cut (determined look), no mouth/brows, thin stick body and limbs, chunky red scarf with two long tails.
+HEAD_C, HEAD_R = Vector((0, 0, 1.47)), 0.33
+SH_Z = 1.04                       # shoulder / arm height
 def on_head(x, z, out=0.0):
     d = Vector((x, 0, z - HEAD_C.z)); y = -math.sqrt(max(HEAD_R ** 2 - d.x ** 2 - d.z ** 2, 0))
     p = Vector((x, y, z)); n = (p - HEAD_C).normalized(); return p + n * out, n
-def face_rot(n): return (-n).to_track_quat('Y', 'Z').to_matrix().to_4x4()
 
-# torso + head
-ellipsoid('Body', (0, 0, .80), (.25, .20, .32), MAT['body'], seg=20, rings=12)
-ellipsoid('Head', HEAD_C, (HEAD_R, HEAD_R * .97, HEAD_R), MAT['body'], seg=24, rings=14)
-# legs apart (clear gap between them) + rounded feet resting on z = 0
+# head, neck, thin tapered torso
+ellipsoid('Head', HEAD_C, (HEAD_R, HEAD_R * .97, HEAD_R), MAT['head'], seg=24, rings=14)
+capsule('Neck', (0, 0, 1.09), (0, 0, 1.17), .03, MAT['body'], rings=2)
+ellipsoid('Body', (0, 0, .85), (.085, .065, .27), MAT['body'], seg=14, rings=10)
+# stick legs apart (clear gap) + small rounded shoes resting on z = 0
 for sx in (-1, 1):
-    capsule(f'Leg{sx}', (sx * .12, 0, .58), (sx * .12, 0, .10), .062, MAT['body'])
-    ellipsoid(f'Foot{sx}', (sx * .13, -.05, .06), (.09, .15, .06), MAT['body'])
-# arms straight out at shoulder height, flat mitten hands with palms facing down, thumb forward
+    capsule(f'Leg{sx}', (sx * .065, 0, .64), (sx * .065, 0, .08), .028, MAT['body'], rings=8, seg=8)
+    ellipsoid(f'Foot{sx}', (sx * .07, -.03, .045), (.055, .09, .045), MAT['body'], seg=10, rings=6)
+# stick arms straight out at shoulder height, small round hands
 for sx in (-1, 1):
-    capsule(f'Arm{sx}', (sx * .17, 0, SH_Z), (sx * .74, 0, SH_Z), .05, MAT['body'], rings=10)
-    ellipsoid(f'Hand{sx}', (sx * .82, 0, SH_Z), (.08, .066, .042), MAT['body'], seg=12, rings=8)
-    capsule(f'Thumb{sx}', (sx * .79, -.04, SH_Z), (sx * .80, -.09, SH_Z), .022, MAT['body'], rings=2, seg=8, cap=2)
+    capsule(f'Arm{sx}', (sx * .06, 0, SH_Z), (sx * .62, 0, SH_Z), .026, MAT['body'], rings=10, seg=8)
+    ellipsoid(f'Hand{sx}', (sx * .66, 0, SH_Z), (.042, .036, .03), MAT['body'], seg=10, rings=6)
 
-# face: big brown eyes, thick brows, open grin
+# eyes: flat white fans that follow the head surface; outline = ellipse with the top inner corner cut off
+def eye_outline(sx, rx=.075, rz=.112, n=28, inner=-.075, outer=.01):
+    """2D outline (x across, z up, eye-local) of the ellipse clipped below a straight lid line that runs from
+    `inner` (at the inner edge) to `outer` (at the outer edge), both measured from the ellipse top."""
+    pts = []
+    for i in range(n):
+        t = i / n * 2 * math.pi; x, z = rx * math.cos(t), rz * math.sin(t)
+        u = (x * sx / rx + 1) / 2                         # 0 at the inner edge, 1 at the outer edge
+        lid = rz + inner + (outer - inner) * u            # lid height at this x
+        pts.append((x, min(z, lid)))
+    return pts
 for sx in (-1, 1):
-    ex, ez = sx * .12, 1.48
-    p, n = on_head(ex, ez, -.01); ellipsoid(f'EyeW{sx}', p, (.082, .034, .105), MAT['eyewhite'], rot=face_rot(n), seg=14, rings=8)
-    p, n = on_head(ex + sx * .005, ez - .01, .02); R = face_rot(n)
-    ellipsoid(f'Iris{sx}', p, (.056, .015, .063), MAT['iris'], rot=R, seg=12, rings=6)
-    p, _ = on_head(ex + sx * .005, ez - .01, .032); ellipsoid(f'Pupil{sx}', p, (.029, .01, .033), MAT['ink'], rot=R, seg=10, rings=6)
-    p, _ = on_head(ex - sx * .012, ez + .018, .04); ellipsoid(f'Glint{sx}', p, (.013, .006, .013), MAT['eyewhite'], rot=R, seg=6, rings=4)
-    a, _ = on_head(sx * .045, 1.61, .012); m, _ = on_head(sx * .12, 1.64, .016); b, _ = on_head(sx * .195, 1.62, .012)
-    capsule(f'BrowA{sx}', a, m, .025, MAT['ink'], rings=2, seg=8, cap=2); capsule(f'BrowB{sx}', m, b, .025, MAT['ink'], rings=2, seg=8, cap=2)
-MZ = 1.29
-def grin(t): return MZ + .012 - .072 * math.sqrt(max(0, 1 - t * t))
-bm = bmesh.new(); N = 10                              # mouth interior: a fan that follows the head surface
-top = [bm.verts.new(on_head(-.105 + .21 * i / N, MZ + .012, .004)[0]) for i in range(N + 1)]
-bot = [bm.verts.new(on_head(-.105 + .21 * i / N, grin(-1 + 2 * i / N), .004)[0]) for i in range(N + 1)]
-for i in range(N): bm.faces.new((top[i], top[i + 1], bot[i + 1], bot[i]))
-bmesh.ops.recalc_face_normals(bm, faces=bm.faces); new_obj('Mouth', bm, MAT['mouth'])
-for i in range(5):
-    t0, t1 = -1 + i * .4, -1 + (i + 1) * .4
-    a, _ = on_head(t0 * .105, grin(t0), .01); b, _ = on_head(t1 * .105, grin(t1), .01)
-    capsule(f'Lip{i}', a, b, .009, MAT['ink'], rings=1, seg=6, cap=1)
-a, _ = on_head(-.105, MZ + .012, .01); b, _ = on_head(.105, MZ + .012, .01); capsule('LipTop', a, b, .009, MAT['ink'], rings=2, seg=6, cap=1)
-p, n = on_head(0, MZ - .042, .01); ellipsoid('Tongue', p, (.042, .01, .02), MAT['tongue'], rot=face_rot(n), seg=10, rings=6)
+    cx, cz = sx * .125, 1.50
+    bm = bmesh.new()
+    ring = [bm.verts.new(on_head(cx + x, cz + z, .006)[0]) for x, z in eye_outline(sx)]
+    mid = bm.verts.new(on_head(cx, cz - .02, .006)[0])
+    for i in range(len(ring)): bm.faces.new((mid, ring[i], ring[(i + 1) % len(ring)]))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces); new_obj(f'Eye{sx}', bm, MAT['eye'])
 
-# red knitted scarf: two snug ribbed rolls around the neck, small knot, short flat tails ON the chest
-torus('ScarfA', (0, 0, 1.095), .195, .046, MAT['scarf'])
-torus('ScarfB', (0, 0, 1.15), .175, .042, MAT['scarf'])
-torus('ScarfRib', (0, 0, 1.123), .2, .012, MAT['scarfdark'], seg=24, sides=4)
-ellipsoid('ScarfKnot', (.09, -.19, 1.07), (.055, .035, .05), MAT['scarf'], seg=10, rings=6)
-for i, (dx, rz) in enumerate([(.07, .08), (.12, -.1)]):
-    rot = Matrix.Rotation(-.35, 4, 'X') @ Matrix.Rotation(rz, 4, 'Y')    # lean back onto the chest
-    slab(f'ScarfTail{i}', Vector((dx, -.175, .99)), (.065, .022, .13), MAT['scarf'], rot=rot)
-    slab(f'ScarfStripe{i}', Vector((dx, -.19, .97)), (.067, .006, .014), MAT['scarfdark'], rot=rot)
+# red chunky knitted scarf: two ribbed rolls round the neck, knot, two long flat tails ON the chest
+torus('ScarfA', (0, 0, 1.105), .085, .036, MAT['scarf'])
+torus('ScarfB', (0, 0, 1.155), .075, .033, MAT['scarf'])
+torus('ScarfRib', (0, 0, 1.13), .095, .010, MAT['scarfdark'], seg=24, sides=4)
+ellipsoid('ScarfKnot', (.045, -.09, 1.09), (.035, .025, .033), MAT['scarf'], seg=10, rings=6)
+for i, (dx, h, rz) in enumerate([(.022, .14, .06), (.052, .115, -.08)]):
+    rot = Matrix.Rotation(-.12, 4, 'X') @ Matrix.Rotation(rz, 4, 'Y')    # lie flat on the chest
+    zc = 1.07 - h
+    slab(f'ScarfTail{i}', Vector((dx, -.074, zc)), (.026, .012, h), MAT['scarf'], rot=rot)
+    for k in range(3):                                                    # knit rows + fringe band
+        slab(f'ScarfStripe{i}{k}', Vector((dx, -.081, zc + h * (.5 - k * .45))), (.027, .004, .006), MAT['scarfdark'], rot=rot)
 
 # ---------- one mesh, exact height, origin at the feet, transforms applied ----------
 bpy.ops.object.select_all(action='DESELECT')

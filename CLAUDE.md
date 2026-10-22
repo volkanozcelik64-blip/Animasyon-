@@ -10,7 +10,8 @@
 - Big round matte-black head, two large glowing white eyes (top inner corner cut → determined look), NO mouth, NO brows; emotion = eye shape + scarf.
 - Thin black stick body and limbs, small round hands, small shoes. Chunky red knitted scarf (#D9362F) with two long fringed tails that react to motion/emotion.
 - Optional dark backpack (journey shots only, not at home).
-- Reference: `design/character-sheet.png` (2D kit: `design/nod2d.js`). `blender/build_nod.py` / `nod_tpose.fbx` still build the OLD white Nod — rebuild them to this design (needs Blender) before Mixamo.
+- Nod is the main character. Reference: `design/character-sheet.png` (2D kit: `design/nod2d.js`).
+- `blender/build_nod.py` builds this design, but it has not been run in Blender yet; the committed `nod_tpose.fbx`, `blender/nod_tpose.blend` and `onizleme/nod3d_*.png` are still the OLD white Nod. Run `blender -b -P blender/build_nod.py` then `blender -b -P blender/preview_tpose.py` and check the renders before uploading to Mixamo.
 
 ## Look
 - Toon shader: flat colours with one hard shade step, emitted — no realistic lighting, no speculars, no AO/bloom/SSR.

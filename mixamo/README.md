@@ -2,7 +2,7 @@
 
 1. Go to https://www.mixamo.com → Upload Character → `nod_tpose.fbx` (repo root).
 2. Auto-rigger markers: chin, wrists, elbows (middle of each arm), knees (middle of each leg), groin (where the legs meet the body).
-   Skeleton LOD: **Standard Skeleton (65)** or **No Fingers** (Nod has mitten hands — "No Fingers" is safest).
+   Skeleton LOD: **Standard Skeleton (65)** or **No Fingers** (Nod has small round ball hands — use "No Fingers").
 3. Download clips as **FBX Binary (.fbx)**, **30 fps**, **Keyframe Reduction: none**:
    - first clip **With Skin** (this becomes the rigged Nod),
    - every other clip **Without Skin**.

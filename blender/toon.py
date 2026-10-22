@@ -126,7 +126,7 @@ def ortho_camera(scene, loc, look_at, ortho_scale):
 def exclude_from_lines(sets, col):
     for ls in sets: ls.select_by_collection = True; ls.collection = col; ls.collection_negation = 'EXCLUSIVE'
 
-DETAIL_MATS = ('Nod_EyeWhite', 'Nod_Iris', 'Nod_Ink', 'Nod_Mouth', 'Nod_Tongue', 'Nod_ScarfDark')
+DETAIL_MATS = ('Nod_Eye', 'Nod_ScarfDark')
 def mark_details(ob, names=DETAIL_MATS):
     """Freestyle face marks on small face/scarf details so they get thin lines, not the thick body ink."""
     idx = {i for i, m in enumerate(ob.data.materials) if m and m.name.split('.')[0] in names}
