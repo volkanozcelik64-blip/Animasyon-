@@ -1,0 +1,19 @@
+/* Shared layout for the design sheets (rendered to PNG by tools/render-sheet.js) */
+body { margin: 0; background: #1f2630; font-family: Inter, 'DejaVu Sans', sans-serif; color: #f2ede3; }
+#sheet { background: #27303d; padding: 22px; box-sizing: border-box; }
+.head { display: flex; align-items: baseline; gap: 18px; margin: 0 4px 16px; }
+.head h1 { font: italic 800 40px 'Inter Display', Inter, sans-serif; margin: 0; letter-spacing: -.5px; }
+.head h1 b { color: #e0473f; }
+.head .sub { font-size: 17px; color: #aab4c2; }
+.grid { display: grid; gap: 14px; }
+.panel { background: #323d4d; border: 1px solid #4a5768; border-radius: 6px; padding: 10px 12px 12px; position: relative; overflow: hidden; }
+.panel h2 { font: italic 600 22px Inter, sans-serif; margin: 0 0 8px; color: #f7efdc; }
+.panel h2 small { font: 400 14px Inter, sans-serif; color: #9fb0c4; margin-left: 10px; font-style: normal; }
+.lbl { font: italic 500 16px Inter, sans-serif; color: #f7efdc; text-align: center; margin-top: 4px; }
+.note { font-size: 13.5px; line-height: 1.45; color: #c8d1dc; }
+.note b { color: #fff; }
+.row { display: flex; gap: 10px; justify-content: space-between; }
+.cell svg { display: block; border-radius: 4px; }
+.sw { display: flex; align-items: center; gap: 10px; margin: 7px 0; font-size: 13.5px; }
+.sw i { width: 34px; height: 34px; border-radius: 50%; border: 2px solid #1b1a18; box-shadow: 0 0 0 2px #59677a; flex: none; }
+.sw span { color: #9fb0c4; font-family: 'JetBrains Mono', monospace; font-size: 12px; display: block; }

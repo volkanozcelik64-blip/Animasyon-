@@ -1,0 +1,76 @@
+<!doctype html><meta charset="utf-8"><title>Nod Character Sheet</title>
+<link rel="stylesheet" href="sheet.css">
+<div id="sheet" style="width:1800px">
+  <div class="head"><h1><b>NOD</b> — Character Sheet</h1><div class="sub">Animasyon · flat 2D toon, thick ink, notebook paper · built once, reused in every shot</div></div>
+  <div class="grid" style="grid-template-columns:1060px 1fr">
+    <div class="panel"><h2>Main Shot</h2><div class="cell" id="main"></div></div>
+    <div class="panel"><h2>Different Angles</h2><div id="angles" style="display:grid;grid-template-columns:1fr 1fr;gap:10px"></div></div>
+  </div>
+  <div class="grid" style="grid-template-columns:1060px 1fr 270px;margin-top:14px">
+    <div class="panel"><h2>Expressions</h2><div id="expr" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px"></div></div>
+    <div class="panel"><h2>Scarf Detail</h2><div class="cell" id="scarf"></div><div class="note" style="margin-top:8px">Two ribbed rolls, knot on his left, one short fringed tail. The tail <b>acts</b>: hangs (calm), whips back (run), flies up (jump), curls tight (scared).</div></div>
+    <div class="panel"><h2>Colour Palette</h2><div id="pal"></div></div>
+  </div>
+  <div class="panel" style="margin-top:14px"><h2>Full Body <small>turnaround · 1.80 m rig (Mixamo) · shown at 0.6 on the set ≈ 1.08 m kid scale</small></h2><div class="cell" id="full"></div></div>
+  <div class="panel" style="margin-top:14px"><h2>Key Poses <small>one per Mixamo clip used in the film</small></h2><div class="cell" id="poses"></div></div>
+</div>
+<script src="nod2d.js"></script><script src="room.js"></script>
+<script>
+const { nod, POSES, COLORS } = NOD, { view, paper, K } = ROOM;
+const card = (w, h, inner, vb, night) => `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${paper(w, h)}<g transform="${vb}">${inner}</g>${night ? `<rect width="${w}" height="${h}" fill="#1d2a55" opacity=".2"/>` : ''}<rect x="1" y="1" width="${w - 2}" height="${h - 2}" fill="none" stroke="${K.ink}" stroke-width="2"/></svg>`;
+const P = (name, o) => nod(Object.assign({}, POSES[name], o));
+
+// main shot: hero wave in the living room, daytime
+document.getElementById('main').innerHTML = view({ x0: 330, y0: -232, w: 360, h: 360 * 690 / 1036 }, 1036, 690, { night: false, lampOn: false, duck: false },
+  P('wave', { x: 470, y: -6, s: 0.95, yaw: 15, tail: 70, wave: 14, tailLen: 30 }));
+
+// angles: head + shoulders
+const ang = [['Front', 0], ['Side', 80], ['Back', 180], ['3/4 View', 38]];
+document.getElementById('angles').innerHTML = ang.map(([n, y]) =>
+  `<div class="cell">${card(318, 336, P('stand', { yaw: y, expr: 'happy' }), 'translate(159 520) scale(2.1)')}<div class="lbl">${n}</div></div>`).join('');
+
+// expressions: heads
+const ex = [['Happy', 'happy'], ['Surprised', 'surprised'], ['Thoughtful', 'thoughtful', 'think'], ['Winking', 'wink'],
+  ['Scared', 'scared', 'scared'], ['Sneaky', 'sneaky'], ['Hungry', 'hungry', 'belly'], ['Caught!', 'caught', 'bite']];
+document.getElementById('expr').innerHTML = ex.map(([n, e, pz]) =>
+  `<div class="cell">${card(250, 168, P(pz || 'stand', { expr: e, yaw: e === 'thoughtful' ? 15 : 0 }), 'translate(125 395) scale(1.9)')}<div class="lbl">${n}</div></div>`).join('');
+
+// scarf detail (close-up) + 4 tail states
+let sc = P('stand', { yaw: 20, expr: 'happy' });
+document.getElementById('scarf').innerHTML = card(356, 380, `<g transform="translate(150 470) scale(3.3)">${sc}</g>`, '');
+
+// palette
+const pal = [['Body white', '#FFFFFF'], ['Ink', '#1B1A18'], ['Scarf red', '#D9362F'], ['Scarf shade', '#A32420'], ['Iris brown', '#7A4A26'],
+  ['Mouth', '#7B1E25'], ['Tongue', '#EF7F8D'], ['Blush', '#F5A3A3'], ['Paper', '#F7EFDC'], ['Rule blue', '#5692D6']];
+document.getElementById('pal').innerHTML = pal.map(([n, c]) => `<div class="sw"><i style="background:${c}"></i><div>${n}<span>${c}</span></div></div>`).join('');
+
+// full body turnaround + height marks
+let fb = '';
+const fbx = [190, 520, 850, 1180];
+[['Front', 0, 'stand'], ['Side', 80, 'stand'], ['Back', 180, 'stand'], ['3/4 Walk', 40, 'walk']].forEach(([n, y, pz], i) => {
+  fb += P(pz, { x: fbx[i], y: 395, s: 1.95, yaw: y, tail: pz === 'walk' ? -70 : 6, wave: pz === 'walk' ? 10 : 0 });
+  fb += `<text x="${fbx[i]}" y="428" font-family="Inter" font-style="italic" font-size="19" fill="#1b1a18" text-anchor="middle">${n}</text>`;
+});
+// height chart
+fb += `<g font-family="Inter" font-size="13" fill="#1b1a18">`;
+for (const [t, y] of [['1.80 m (rig)', 395 - 180 * 1.95 + 0.5], ['head 0.70 m = 39 %', 395 - 110 * 1.95], ['shoulders 1.00 m', 395 - 100 * 1.95 + 22], ['0', 395]])
+  fb += `<path d="M70,${y.toFixed(1)}H1290" stroke="#de544c" stroke-width="1.2" stroke-dasharray="6 6"/><text x="1300" y="${(y + 4).toFixed(1)}">${t}</text>`;
+fb += `</g>`;
+document.getElementById('full').innerHTML = card(1754, 440, fb, '') .replace('</svg>',
+  `<g transform="translate(1440 0)">${view({ x0: 370, y0: -140, w: 250, h: 250 * 440 / 300 }, 300, 440, { night: false, lampOn: false, duck: false }, ROOM.nodPose('stand', 500, 60, {}), '', true).replace(/<svg[^>]*>/, '<g>').replace('</svg>', '</g>')}
+   <text x="150" y="430" font-family="Inter" font-style="italic" font-size="15" fill="#1b1a18" text-anchor="middle">on the set (kid scale)</text></g></svg>`);
+
+// key poses
+const kp = [['sit_idle', 'sit', 0, 'happy'], ['sit_to_stand / idle', 'stand', 0, 'happy'], ['tiptoe', 'tiptoe', 60, 'sneaky'], ['scared', 'scared', 0, 'scared'],
+  ['crawl', 'crawl', 62, 'determined'], ['run', 'run', 70, 'determined'], ['jump', 'jump', 20, 'joy'], ['land', 'land', 0, 'surprised'], ['cheer', 'cheer', 0, 'joy']];
+let ps = '';
+kp.forEach(([n, pz, y, e], i) => {
+  const x = 100 + i * 194, base = pz === 'jump' ? 330 : 385;
+  ps += `<path d="M${x - 80},386H${x + 80}" stroke="#1b1a18" stroke-width="2"/>`;
+  if (pz === 'sit') ps += `<rect x="${x - 46}" y="${385 - 75 * 1.45}" width="92" height="${75 * 1.45}" rx="6" fill="#4a5d70" stroke="#1b1a18" stroke-width="3"/>`;
+  ps += P(pz, { x: pz === 'crawl' ? x - 40 : x, y: base, s: 1.45, yaw: y, expr: e });
+  ps += `<text x="${x}" y="420" font-family="JetBrains Mono" font-size="15" fill="#1b1a18" text-anchor="middle">${n}</text>`;
+});
+document.getElementById('poses').innerHTML = card(1754, 440, ps, '');
+window.SHEET_READY = true;
+</script>
