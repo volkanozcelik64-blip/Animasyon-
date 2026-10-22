@@ -137,7 +137,7 @@
         s += `<path d="M826,${top} v-34 q0,-6 6,-6 h28 q6,0 6,6 v34 z" fill="#e8f2f4" opacity=".9" stroke="${K.ink}" stroke-width="2.4"/>`;
         for (const [x, y] of [[836, -204], [852, -206], [844, -216], [834, -226], [855, -222]]) s += `<circle cx="${x}" cy="${y}" r="6" fill="#c98a4b" stroke="${K.ink}" stroke-width="1.2"/><circle cx="${x - 1}" cy="${y - 1}" r="1" fill="#5a3a22"/>`;
         s += r(828, -248, 36, 9, K.red, 2.2, 3) + r(841, -253, 10, 5, K.red, 1.8, 2);
-        s += r(832, -208, 28, 10, '#fff', 1.2, 1) + `<text x="846" y="-200.5" font-family="Inter" font-weight="700" font-size="6" text-anchor="middle" fill="${K.ink}">COOKIES</text>`;
+        s += r(832, -208, 28, 10, '#fff', 1.2, 1) + `<text x="846" y="-200.5" font-family="Inter" font-weight="700" font-size="5.2" text-anchor="middle" fill="${K.ink}">KURABİYE</text>`;
       }
       return s;
     },

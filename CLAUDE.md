@@ -6,6 +6,12 @@
 - Mixamo is done by hand: upload `nod_tpose.fbx`, auto-rig, download clips into `mixamo/` (see `mixamo/README.md`).
 - `blender/toon.py` is the single source of the look; every render script imports it.
 
+## Nod's design (current, from the user's reference board)
+- Big round matte-black head, two large glowing white eyes (top inner corner cut → determined look), NO mouth, NO brows; emotion = eye shape + scarf.
+- Thin black stick body and limbs, small round hands, small shoes. Chunky red knitted scarf (#D9362F) with two long fringed tails that react to motion/emotion.
+- Optional dark backpack (journey shots only, not at home).
+- Reference: `design/character-sheet.png` (2D kit: `design/nod2d.js`). `blender/build_nod.py` / `nod_tpose.fbx` still build the OLD white Nod — rebuild them to this design (needs Blender) before Mixamo.
+
 ## Look
 - Toon shader: flat colours with one hard shade step, emitted — no realistic lighting, no speculars, no AO/bloom/SSR.
 - Thick black ink outlines (Freestyle): heavy line on body silhouettes, thin line on face/scarf details (Freestyle face marks).

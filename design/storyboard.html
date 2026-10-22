@@ -1,4 +1,4 @@
-<!doctype html><meta charset="utf-8"><title>Midnight Snack Storyboard</title>
+<!doctype html><meta charset="utf-8"><title>Gece Atıştırması Storyboard</title>
 <link rel="stylesheet" href="sheet.css">
 <style>
 .sb { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
@@ -12,12 +12,12 @@
 .v.mono { font: 12.5px 'JetBrains Mono'; color: #f2c9a0; }
 </style>
 <div id="sheet" style="width:1800px">
-  <div class="head"><h1><b>MIDNIGHT SNACK</b> — Storyboard</h1><div class="sub">36 s · 9:16 · 1080×1920 · 30 fps · one living-room set · orthographic cameras C1–C7 (see location sheet)</div></div>
+  <div class="head"><h1><b>GECE ATIŞTIRMASI</b> — Storyboard</h1><div class="sub">36 sn · 9:16 · 1080×1920 · 30 fps · tek oturma odası seti · ortografik kameralar C1–C7 (mekân sayfasına bak)</div></div>
   <div class="sb" id="sb"></div>
   <div class="panel note" style="margin-top:14px">
-    <b>Clips to download from Mixamo</b> (into <code>mixamo/</code>): sit_idle, sit_to_stand, tiptoe, scared, crawl, peek*, run (in place), jump, land, cheer, idle. *peek = crawl variant / looking around.
-    &nbsp;·&nbsp; <b>Every clip change is an NLA cross-fade</b> (frames listed per shot), never a hard switch. &nbsp;·&nbsp; <b>Feet:</b> lock planted feet after retargeting (tiptoe, land, cheer); travel comes from the scene script, not root motion.
-    &nbsp;·&nbsp; No motion blur, no smear frames. &nbsp;·&nbsp; Night = blue wash over the set; shots 11–12 lights on (wash removed).
+    <b>Mixamo'dan indirilecek klipler</b> (<code>mixamo/</code> klasörüne): sit_idle, sit_to_stand, tiptoe, scared, crawl, peek*, run (yerinde), jump, land, cheer, idle. *peek = crawl varyantı / etrafa bakınma.
+    &nbsp;·&nbsp; <b>Her klip değişimi NLA geçişiyle</b> (kare sayıları çekimlerde), asla sert geçiş yok. &nbsp;·&nbsp; <b>Ayaklar:</b> retarget sonrası yere basan ayaklar sabitlenir (tiptoe, land, cheer); ilerleme root motion'dan değil sahne script'inden gelir.
+    &nbsp;·&nbsp; Hareket bulanıklığı yok, smear kare yok. &nbsp;·&nbsp; Gece = sete mavi ton; 11–12. çekimlerde ışıklar açık (ton kalkar).
   </div>
 </div>
 <script src="nod2d.js"></script><script src="room.js"></script><script src="shots.js"></script>
@@ -28,9 +28,9 @@ document.getElementById('sb').innerHTML = FILM.SHOTS.map((s, i) => `
     <div class="cap">
       <div class="num">${String(i + 1).padStart(2, '0')}<small>${s.t}</small></div>
       <div><span class="tag">${s.size}</span> <span class="tag" style="background:#e0473f">${s.cam}</span></div>
-      <div><div class="k">Action</div><div class="v">${s.action}</div></div>
-      <div><div class="k">Clip / blend</div><div class="v mono">${s.clip}</div></div>
-      <div><div class="k">Sound</div><div class="v">${s.sound}</div></div>
+      <div><div class="k">Aksiyon</div><div class="v">${s.action}</div></div>
+      <div><div class="k">Klip / geçiş</div><div class="v mono">${s.clip}</div></div>
+      <div><div class="k">Ses</div><div class="v">${s.sound}</div></div>
     </div>
   </div>`).join('');
 window.SHEET_READY = true;

@@ -1,15 +1,15 @@
-<!doctype html><meta charset="utf-8"><title>Living Room Location</title>
+<!doctype html><meta charset="utf-8"><title>Oturma Odası Mekânı</title>
 <link rel="stylesheet" href="sheet.css">
 <div id="sheet" style="width:1800px">
-  <div class="head"><h1><b>THE LIVING ROOM</b> — Location Sheet</h1><div class="sub">one continuous set · every shot is an orthographic camera on it · drawn in ink on the notebook paper</div></div>
-  <div class="panel"><h2>Set Overview — Night <small>numbered props · dashed frames = storyboard cameras C1–C7 (9:16)</small></h2><div class="cell" id="pano"></div></div>
+  <div class="head"><h1><b>OTURMA ODASI</b> — Mekân Sayfası</h1><div class="sub">tek kesintisiz set · her çekim bu sette bir ortografik kamera · defter kağıdına mürekkeple çizili</div></div>
+  <div class="panel"><h2>Setin Tamamı — Gece <small>numaralı eşyalar · kesikli çerçeveler = storyboard kameraları C1–C7 (9:16)</small></h2><div class="cell" id="pano"></div></div>
   <div class="grid" style="grid-template-columns:640px 1fr 380px;margin-top:14px">
-    <div class="panel"><h2>Floor Plan <small>top view, cm</small></h2><div class="cell" id="plan"></div></div>
+    <div class="panel"><h2>Kat Planı <small>üstten görünüm, cm</small></h2><div class="cell" id="plan"></div></div>
     <div style="display:grid;gap:14px">
-      <div class="panel"><h2>Lights On <small>shots 11–12</small></h2><div class="cell" id="day"></div></div>
-      <div class="panel"><h2>Story Props</h2><div class="row" id="props"></div></div>
+      <div class="panel"><h2>Işıklar Açık <small>11–12. çekimler</small></h2><div class="cell" id="day"></div></div>
+      <div class="panel"><h2>Hikâye Eşyaları</h2><div class="row" id="props"></div></div>
     </div>
-    <div class="panel"><h2>Key &amp; Palette</h2><div id="key" class="note"></div><div id="pal" style="margin-top:8px"></div></div>
+    <div class="panel"><h2>Açıklama &amp; Palet</h2><div id="key" class="note"></div><div id="pal" style="margin-top:8px"></div></div>
   </div>
 </div>
 <script src="nod2d.js"></script><script src="room.js"></script><script src="shots.js"></script>
@@ -18,9 +18,9 @@ const { view, K, parts, nodPose } = ROOM;
 const PW = 1754, VB = { x0: -40, y0: -300, w: 1080 }; VB.h = VB.w * 560 / PW * (PW / 1754);
 const H = Math.round(PW * 470 / 1080);
 // numbered props
-const props = [[85, -110, 'Hallway door'], [156, -140, 'Light switch'], [215, -60, 'Lamp shadow “monster”'], [300, -195, 'Coat rack (Dad’s coat & hat)'],
-  [354, -195, 'Floor lamp'], [490, -255, 'Window (night sky)'], [648, -220, 'Nod’s drawing'], [720, -262, 'Clock 11:58'], [500, -106, 'Sofa'],
-  [500, 40, 'Coffee table'], [500, 118, 'Rug'], [648, 112, 'Rubber duck'], [720, -125, 'Armchair'], [846, -270, 'Cookie jar'], [846, -100, 'Bookshelf'], [945, -60, 'Plant']];
+const props = [[85, -110, 'Koridor kapısı'], [156, -140, 'Işık düğmesi'], [215, -60, 'Lamba gölgesi “canavar”'], [300, -195, 'Portmanto (babanın paltosu & şapkası)'],
+  [354, -195, 'Ayaklı lamba'], [490, -255, 'Pencere (gece göğü)'], [648, -220, 'Nod’un çizimi'], [720, -262, 'Saat 23:58'], [500, -106, 'Kanepe'],
+  [500, 40, 'Sehpa'], [500, 118, 'Halı'], [648, 112, 'Lastik ördek'], [720, -125, 'Koltuk'], [846, -270, 'Kurabiye kavanozu'], [846, -100, 'Kitaplık'], [945, -60, 'Saksı bitkisi']];
 let ov = props.map(([x, y], i) => `<circle cx="${x}" cy="${y}" r="9" fill="#e0473f" stroke="#1b1a18" stroke-width="1.6"/><text x="${x}" y="${y + 4}" font-family="Inter" font-weight="800" font-size="10.5" fill="#fff" text-anchor="middle">${i + 1}</text>`).join('');
 // camera frames (first shot that uses each camera)
 const col = { C1: '#e0473f', C2: '#3b7dd8', C3: '#2f9e6b', C4: '#d08a12', C5: '#8a4fc8', C6: '#d0457f', C7: '#1b8fa0' };
@@ -38,16 +38,16 @@ document.getElementById('pano').innerHTML = view({ x0: -40, y0: -300, w: 1080, h
 const P = (x, z, w, d, fill, label, t) => `<rect x="${x}" y="${z}" width="${w}" height="${d}" rx="4" fill="${fill}" stroke="#1b1a18" stroke-width="2"/>` + (label ? `<text x="${x + w / 2}" y="${z + d / 2 + 4}" font-family="Inter" font-size="${t || 12}" text-anchor="middle" fill="${['#4a5d70', '#7a5a44', '#24314d', '#c8202a', '#6b4a33'].includes(fill) ? '#fff' : '#1b1a18'}">${label}</text>` : '');
 let pl = `<g transform="translate(20 20) scale(.6)">`;
 pl += `<rect x="0" y="0" width="1000" height="560" fill="#f2e2c8" stroke="#1b1a18" stroke-width="5"/>`;
-pl += `<path d="M0,0H1000" stroke="#1b1a18" stroke-width="12"/><text x="500" y="-12" font-family="Inter" font-size="20" text-anchor="middle" fill="#f7efdc">back wall (all cameras look at it)</text>`;
-pl += P(40, -8, 96, 16, '#f3d99a', '') + `<text x="88" y="40" font-family="Inter" font-size="16" text-anchor="middle">door</text>`;
+pl += `<path d="M0,0H1000" stroke="#1b1a18" stroke-width="12"/><text x="500" y="-12" font-family="Inter" font-size="20" text-anchor="middle" fill="#f7efdc">arka duvar (tüm kameralar buraya bakar)</text>`;
+pl += P(40, -8, 96, 16, '#f3d99a', '') + `<text x="88" y="40" font-family="Inter" font-size="16" text-anchor="middle">kapı</text>`;
 pl += `<ellipse cx="500" cy="320" rx="220" ry="110" fill="#b5483e" stroke="#1b1a18" stroke-width="2"/>`;
-pl += P(286, 8, 30, 30, '#4a5d70', '') + `<text x="300" y="60" font-family="Inter" font-size="15" text-anchor="middle">rack</text>`;
+pl += P(286, 8, 30, 30, '#4a5d70', '') + `<text x="300" y="60" font-family="Inter" font-size="15" text-anchor="middle">portmanto</text>`;
 pl += `<circle cx="354" cy="40" r="16" fill="#fbe3a2" stroke="#1b1a18" stroke-width="2"/>`;
 pl += P(420, 6, 140, 10, '#24314d', '');
-pl += P(380, 30, 240, 90, '#4a5d70', 'sofa', 18) + P(410, 250, 180, 90, '#7a5a44', 'table', 18);
+pl += P(380, 30, 240, 90, '#4a5d70', 'kanepe', 18) + P(410, 250, 180, 90, '#7a5a44', 'sehpa', 18);
 pl += `<circle cx="648" cy="340" r="10" fill="#f2c230" stroke="#1b1a18" stroke-width="2"/>`;
-pl += P(660, 40, 130, 110, '#7a5a44', 'armchair', 17) + P(798, 4, 96, 44, '#6b4a33', 'shelf', 16) + `<circle cx="944" cy="30" r="22" fill="#c8202a" stroke="#1b1a18" stroke-width="2"/>`;
-pl += `<path d="M500,500 L500,560" stroke="#999" stroke-dasharray="5 5"/><text x="500" y="545" font-family="Inter" font-size="16" text-anchor="middle" fill="#555">TV (off-screen, behind cameras)</text>`;
+pl += P(660, 40, 130, 110, '#7a5a44', 'koltuk', 17) + P(798, 4, 96, 44, '#6b4a33', 'kitaplık', 16) + `<circle cx="944" cy="30" r="22" fill="#c8202a" stroke="#1b1a18" stroke-width="2"/>`;
+pl += `<path d="M500,500 L500,560" stroke="#999" stroke-dasharray="5 5"/><text x="500" y="545" font-family="Inter" font-size="16" text-anchor="middle" fill="#555">TV (kadraj dışı, kameraların arkasında)</text>`;
 // cameras: x = frame centre, arrow toward the back wall; C4 low near the floor
 const camX = { C1: 530, C2: 440, C3: 846, C4: 648, C5: 270, C6: 760, C7: 110 }, camZ = { C1: 640, C2: 600, C3: 600, C4: 470, C5: 620, C6: 640, C7: 610 };
 for (const c in camX) {
@@ -57,21 +57,21 @@ for (const c in camX) {
     `<rect x="${x - 26}" y="${z - 30}" width="52" height="34" rx="5" fill="${col[c]}" stroke="#1b1a18" stroke-width="2"/><text x="${x}" y="${z - 7}" font-family="JetBrains Mono" font-weight="700" font-size="18" fill="#fff" text-anchor="middle">${c}</text>`;
 }
 pl += `</g>`;
-document.getElementById('plan').innerHTML = `<svg width="616" height="470" viewBox="0 0 616 470">${pl}<text x="20" y="462" font-family="Inter" font-size="13" fill="#c8d1dc">All cameras orthographic, facing the back wall; ortho scale = shot width × 16/9.</text></svg>`.replace('viewBox="0 0 616 470"', 'viewBox="0 -10 616 480"');
+document.getElementById('plan').innerHTML = `<svg width="616" height="470" viewBox="0 0 616 470">${pl}<text x="20" y="462" font-family="Inter" font-size="13" fill="#c8d1dc">Tüm kameralar ortografik, arka duvara bakar; ortho ölçeği = çekim genişliği × 16/9.</text></svg>`.replace('viewBox="0 0 616 470"', 'viewBox="0 -10 616 480"');
 
 // lights-on version
 document.getElementById('day').innerHTML = view({ x0: -40, y0: -300, w: 1080, h: 1080 * 340 / 720 }, 720, 340, { night: false, lit: true, parents: true }, nodPose('bite', 740, 62, { lift: -114, expr: 'caught' }));
 
 // props close-ups
 const pc = (x0, y0, w, h, label, o = {}) => `<div class="cell">${view({ x0, y0, w, h }, 226, 190, Object.assign({ night: false }, o))}<div class="lbl">${label}</div></div>`;
-document.getElementById('props').innerHTML = pc(806, -262, 80, 67, 'Cookie jar (goal)') + pc(612, 58, 70, 59, 'Rubber duck (SQUEAK)') + pc(140, -230, 230, 194, 'Coat rack + lamp = shadow', { night: true });
+document.getElementById('props').innerHTML = pc(806, -262, 80, 67, 'Kurabiye kavanozu (hedef)') + pc(612, 58, 70, 59, 'Lastik ördek (VIIK)') + pc(140, -230, 230, 194, 'Portmanto + lamba = gölge', { night: true });
 
 // key + palette
 document.getElementById('key').innerHTML = '<ol style="margin:0;padding-left:22px">' + props.map(p => `<li>${p[2]}</li>`).join('') + '</ol>' +
-  '<p style="margin:10px 0 0"><b>Scale:</b> set in real cm; Nod (1.80 m rig) placed at ×0.6 ≈ 1.08 m, so he is kid-sized next to the sofa (seat 45 cm) and must climb the armchair (back 114 cm) to reach the jar (shelf top 196 cm).</p>' +
-  '<p style="margin:6px 0 0"><b>Night:</b> blue wash, moon in window, lamp on → horned shadow. <b>Lights on:</b> wash off, hallway lit, shadow gone.</p>' +
-  '<p style="margin:6px 0 0"><b>Look:</b> walls are the paper itself; furniture flat colour + thick ink; floor planks semi-transparent so the blue rules show through.</p>';
-const pal = [['Scarf / accent red', '#C8202A'], ['Charcoal', '#2D2B2C'], ['Wood brown', '#7A5A44'], ['Curtain beige', '#C9B8A4'], ['Sofa slate', '#4A5D70'], ['Night sky', '#24314D'], ['Rug red', '#B5483E'], ['Duck yellow', '#F2C230']];
+  '<p style="margin:10px 0 0"><b>Ölçek:</b> set gerçek cm; Nod (1.80 m rig) ×0.6 ≈ 1.08 m yerleştirilir, kanepenin (oturak 45 cm) yanında çocuk boyundadır ve kavanoza (kitaplık üstü 196 cm) ulaşmak için koltuğa (sırt 114 cm) tırmanması gerekir.</p>' +
+  '<p style="margin:6px 0 0"><b>Gece:</b> mavi ton, pencerede ay, lamba açık → boynuzlu gölge. <b>Işıklar açık:</b> ton kalkar, koridor aydınlık, gölge yok.</p>' +
+  '<p style="margin:6px 0 0"><b>Görünüm:</b> duvarlar kağıdın kendisi; mobilyalar düz renk + kalın mürekkep; zemin tahtaları yarı saydam, mavi çizgiler görünür.</p>';
+const pal = [['Atkı / vurgu kırmızı', '#C8202A'], ['Kömür', '#2D2B2C'], ['Ahşap kahve', '#7A5A44'], ['Perde bej', '#C9B8A4'], ['Kanepe arduvaz', '#4A5D70'], ['Gece göğü', '#24314D'], ['Halı kırmızı', '#B5483E'], ['Ördek sarı', '#F2C230']];
 document.getElementById('pal').innerHTML = pal.map(([n, c]) => `<div class="sw"><i style="background:${c}"></i><div>${n}<span>${c}</span></div></div>`).join('');
 window.SHEET_READY = true;
 </script>

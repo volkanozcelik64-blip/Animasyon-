@@ -98,8 +98,8 @@ NODE_PATH=$(npm root -g) node tools/render-shorts.js nod-siuuu.html frames --sti
 
 ## Design sheets (`design/`)
 
-Pre-production for the Blender film **Midnight Snack** (36 s, 9:16): the character, the set and the storyboard. They're drawn as flat 2D ink so they match the toon look.
-- `design/character-sheet.png`: Nod's main shot, four angles, eight expressions, a scarf close-up, the palette, a full-body turnaround and one key pose per Mixamo clip.
+Pre-production for the Blender film **Gece Atıştırması / Midnight Snack** (36 s, 9:16): the character, the set and the storyboard. They're drawn as flat 2D ink so they match the toon look.
+- `design/character-sheet.png` (new Nod: black head, white eyes, red scarf): Nod's main shot, four angles, eight expressions, a scarf close-up, the palette, a full-body turnaround and one key pose per Mixamo clip.
 - `design/location-sheet.png`: the single living-room set with numbered props, the camera frames C1–C7, a floor plan, the lights-on version and the story props.
 - `design/storyboard.png`: 12 shots, each with timing, camera, action, Mixamo clip and NLA blend, and sound.
 
